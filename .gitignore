@@ -1,0 +1,78 @@
+# -----------------------------
+# Python
+# -----------------------------
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+.eggs/
+*.manifest
+*.spec
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Build / distribution
+build/
+dist/
+*.lock
+*.log
+pip-wheel-metadata/
+*.whl
+
+# IDE / Editor settings
+.vscode/
+.idea/
+*.iml
+
+# Jupyter / Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# Test / coverage
+htmlcov/
+.tox/
+.nox/
+.coverage
+coverage.xml
+*.cover
+*.py,cover
+.cache
+.pytest_cache/
+pytestdebug.log
+
+# MyPy / Type check
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pydantic validation cache
+__pydantic_cache__/
+
+# -----------------------------
+# Project-specific
+# -----------------------------
+# Traces & debug logs
+*.trace.json
+*trace.json
+*.trace.log
+
+# Visualization outputs
+*.png
+*.svg
+*.pdf
+
+# Local config
+config.json
+secrets.json
