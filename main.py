@@ -6,21 +6,24 @@ A comprehensive debugging framework that provides step-by-step visibility
 into AI agent behavior, similar to pdb for Python code.
 
 Author: AI Assistant
-Version: 1.0.0
+Version: 2.0.0
 License: MIT
 """
 
 import json
 import time
 import uuid
+import asyncio
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Callable, Union
+from typing import Any, Dict, List, Optional, Callable, Union, AsyncGenerator
 import threading
 import copy
 from contextlib import contextmanager
+import inspect
+import re
 
 
 class EventType(Enum):
@@ -36,6 +39,11 @@ class EventType(Enum):
     ERROR = "error"
     BREAKPOINT = "breakpoint"
     INTER_AGENT_MESSAGE = "inter_agent_message"
+    AGENT_CREATED = "agent_created"
+    AGENT_DESTROYED = "agent_destroyed"
+    TASK_START = "task_start"
+    TASK_END = "task_end"
+    CONTEXT_SWITCH = "context_switch"
 
 
 class BreakpointType(Enum):
@@ -50,6 +58,8 @@ class BreakpointType(Enum):
     AFTER_LLM = "after_llm"
     ON_ERROR = "on_error"
     CONDITIONAL = "conditional"
+    ON_AGENT_CREATE = "on_agent_create"
+    ON_TASK_START = "on_task_start"
 
 
 @dataclass
@@ -63,6 +73,7 @@ class TraceEvent:
     data: Dict[str, Any] = field(default_factory=dict)
     parent_event_id: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    duration: Optional[float] = None  # Duration in seconds for end events
 
 
 @dataclass
@@ -72,8 +83,10 @@ class Breakpoint:
     breakpoint_type: BreakpointType = BreakpointType.BEFORE_TOOL
     condition: Optional[Callable[[TraceEvent], bool]] = None
     tool_name: Optional[str] = None
+    agent_id: Optional[str] = None
     enabled: bool = True
     hit_count: int = 0
+    temporary: bool = False  # One-time breakpoint
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
@@ -89,6 +102,14 @@ class AgentState:
         self.reasoning_log: List[str] = []
         self.is_paused: bool = False
         self.last_llm_call: Optional[Dict[str, Any]] = None
+        self.created_at: datetime = datetime.now()
+        self.tasks_completed: int = 0
+        self.errors_encountered: int = 0
+        self.performance_stats: Dict[str, float] = {
+            'total_tool_time': 0.0,
+            'total_llm_time': 0.0,
+            'avg_response_time': 0.0
+        }
 
 
 class MockRegistry:
@@ -99,23 +120,36 @@ class MockRegistry:
         self._llm_mocks: Dict[str, Any] = {}
         self._replay_mode: bool = False
         self._replay_data: List[TraceEvent] = []
+        self._replay_index: int = 0
+        self._mock_callbacks: Dict[str, Callable] = {}
         
-    def mock_tool(self, tool_name: str, output: Any):
+    def mock_tool(self, tool_name: str, output: Any, callback: Optional[Callable] = None):
         """Mock the output of a specific tool"""
         self._tool_mocks[tool_name] = output
+        if callback:
+            self._mock_callbacks[tool_name] = callback
         
-    def mock_llm(self, prompt_pattern: str, response: Any):
+    def mock_llm(self, prompt_pattern: str, response: Any, callback: Optional[Callable] = None):
         """Mock LLM response for prompts matching a pattern"""
         self._llm_mocks[prompt_pattern] = response
+        if callback:
+            self._mock_callbacks[f"llm_{prompt_pattern}"] = callback
         
     def get_tool_mock(self, tool_name: str) -> Optional[Any]:
         """Get mocked output for a tool"""
-        return self._tool_mocks.get(tool_name)
+        mock = self._tool_mocks.get(tool_name)
+        if mock is not None and tool_name in self._mock_callbacks:
+            # Execute callback for dynamic mocking
+            return self._mock_callbacks[tool_name]()
+        return mock
         
     def get_llm_mock(self, prompt: str) -> Optional[Any]:
         """Get mocked LLM response for a prompt"""
         for pattern, response in self._llm_mocks.items():
             if pattern in prompt:
+                callback_key = f"llm_{pattern}"
+                if callback_key in self._mock_callbacks:
+                    return self._mock_callbacks[callback_key](prompt)
                 return response
         return None
         
@@ -123,9 +157,70 @@ class MockRegistry:
         """Enable replay mode with historical trace data"""
         self._replay_mode = True
         self._replay_data = replay_data
+        self._replay_index = 0
+        
+    def get_next_replay_event(self) -> Optional[TraceEvent]:
+        """Get next event in replay mode"""
+        if self._replay_mode and self._replay_index < len(self._replay_data):
+            event = self._replay_data[self._replay_index]
+            self._replay_index += 1
+            return event
+        return None
         
     def is_replay_mode(self) -> bool:
         return self._replay_mode
+
+    def clear_mocks(self):
+        """Clear all mocks and callbacks"""
+        self._tool_mocks.clear()
+        self._llm_mocks.clear()
+        self._mock_callbacks.clear()
+
+
+class PerformanceMonitor:
+    """Monitor and analyze agent performance metrics"""
+    
+    def __init__(self):
+        self.metrics: Dict[str, List[float]] = {
+            'tool_execution_times': [],
+            'llm_response_times': [],
+            'memory_access_times': [],
+            'reasoning_times': []
+        }
+        self.start_times: Dict[str, datetime] = {}
+        
+    def start_timing(self, event_type: str, event_id: str):
+        """Start timing for a specific event"""
+        self.start_times[event_id] = datetime.now()
+        
+    def end_timing(self, event_id: str) -> Optional[float]:
+        """End timing and return duration"""
+        if event_id in self.start_times:
+            duration = (datetime.now() - self.start_times[event_id]).total_seconds()
+            del self.start_times[event_id]
+            return duration
+        return None
+        
+    def record_metric(self, metric_type: str, value: float):
+        """Record a performance metric"""
+        if metric_type in self.metrics:
+            self.metrics[metric_type].append(value)
+            
+    def get_statistics(self) -> Dict[str, Dict[str, float]]:
+        """Get performance statistics"""
+        stats = {}
+        for metric_type, values in self.metrics.items():
+            if values:
+                stats[metric_type] = {
+                    'count': len(values),
+                    'mean': sum(values) / len(values),
+                    'max': max(values),
+                    'min': min(values),
+                    'latest': values[-1] if values else 0
+                }
+            else:
+                stats[metric_type] = {'count': 0, 'mean': 0, 'max': 0, 'min': 0, 'latest': 0}
+        return stats
 
 
 class DebugConsole:
@@ -155,7 +250,14 @@ class DebugConsole:
             'q': self._quit,
             'quit': self._quit,
             'trace': self._show_trace,
-            'state': self._show_state
+            'state': self._show_state,
+            'p': self._performance,
+            'performance': self._performance,
+            'watch': self._watch_variable,
+            'mock': self._mock_tool,
+            'replay': self._replay_trace,
+            'export': self._export_trace,
+            'agents': self._list_agents
         }
         
     def start(self, current_event: TraceEvent, agent_state: AgentState):
@@ -171,6 +273,10 @@ class DebugConsole:
                 command = input("\n(agentdb) ").strip().lower()
                 if command in self.commands:
                     self.commands[command](current_event, agent_state)
+                elif command.startswith('watch '):
+                    self._watch_variable(current_event, agent_state, command[6:])
+                elif command.startswith('mock '):
+                    self._mock_tool(current_event, agent_state, command[5:])
                 else:
                     print(f"Unknown command: {command}. Type 'h' for help.")
             except KeyboardInterrupt:
@@ -242,7 +348,8 @@ class DebugConsole:
         """Show execution trace"""
         print("\n📊 Execution Trace:")
         for trace_event in self.debugger.trace_events[-10:]:  # Last 10 events
-            print(f"  [{trace_event.timestamp.strftime('%H:%M:%S')}] {trace_event.event_type.value}: {trace_event.data}")
+            duration = f" ({trace_event.duration:.2f}s)" if trace_event.duration else ""
+            print(f"  [{trace_event.timestamp.strftime('%H:%M:%S')}{duration}] {trace_event.agent_id} - {trace_event.event_type.value}")
             
     def _show_state(self, event: TraceEvent, state: AgentState):
         """Show current agent state"""
@@ -252,6 +359,62 @@ class DebugConsole:
         print(f"  Execution Stack: {state.execution_stack}")
         print(f"  Memory Keys: {list(state.memory.keys())}")
         print(f"  Tool Outputs: {list(state.tool_outputs.keys())}")
+        print(f"  Tasks Completed: {state.tasks_completed}")
+        print(f"  Errors: {state.errors_encountered}")
+        
+    def _performance(self, event: TraceEvent, state: AgentState):
+        """Show performance metrics"""
+        stats = self.debugger.performance_monitor.get_statistics()
+        print("\n📈 Performance Metrics:")
+        for metric, values in stats.items():
+            if values['count'] > 0:
+                print(f"  {metric}: {values['mean']:.3f}s avg ({values['count']} samples)")
+                
+    def _watch_variable(self, event: TraceEvent, state: AgentState, variable_name: str = ""):
+        """Watch a variable for changes"""
+        if not variable_name:
+            variable_name = input("Variable name to watch: ")
+        
+        def watch_condition(event: TraceEvent) -> bool:
+            return (event.event_type == EventType.MEMORY_WRITE and 
+                   event.data.get('key') == variable_name)
+        
+        bp = Breakpoint(
+            breakpoint_type=BreakpointType.CONDITIONAL,
+            condition=watch_condition,
+            temporary=True
+        )
+        self.debugger.add_breakpoint(bp)
+        print(f"👀 Watching variable '{variable_name}' for changes")
+        
+    def _mock_tool(self, event: TraceEvent, state: AgentState, tool_name: str = ""):
+        """Mock a tool with custom output"""
+        if not tool_name:
+            tool_name = input("Tool name to mock: ")
+        output = input(f"Mock output for {tool_name}: ")
+        self.debugger.mock_registry.mock_tool(tool_name, output)
+        print(f"🎭 Tool '{tool_name}' mocked with output: {output}")
+        
+    def _replay_trace(self, event: TraceEvent, state: AgentState):
+        """Replay trace from file"""
+        filename = input("Trace file to replay: ")
+        try:
+            self.debugger.replay_from_file(filename)
+            print(f"🎬 Replay mode activated with {filename}")
+        except Exception as e:
+            print(f"❌ Failed to replay: {e}")
+            
+    def _export_trace(self, event: TraceEvent, state: AgentState):
+        """Export current trace"""
+        filename = input("Export filename: ")
+        self.debugger.export_trace(filename)
+        
+    def _list_agents(self, event: TraceEvent, state: AgentState):
+        """List all registered agents"""
+        print("\n🤖 Registered Agents:")
+        for agent_id, agent_state in self.debugger.agent_states.items():
+            status = "⏸️" if agent_state.is_paused else "▶️"
+            print(f"  {status} {agent_id} (tasks: {agent_state.tasks_completed}, errors: {agent_state.errors_encountered})")
         
     def _help(self, event: TraceEvent, state: AgentState):
         """Show help message"""
@@ -267,6 +430,12 @@ class DebugConsole:
   l, list     - List breakpoints
   trace       - Show execution trace
   state       - Show agent state
+  p, performance - Show performance metrics
+  watch <var> - Watch variable for changes
+  mock <tool> - Mock tool output
+  replay      - Replay trace from file
+  export      - Export current trace
+  agents      - List all agents
   h, help     - Show this help
   q, quit     - Quit debugger
         """)
@@ -274,24 +443,31 @@ class DebugConsole:
     def _quit(self, event: TraceEvent, state: AgentState):
         """Quit debugger"""
         print("Quitting debugger...")
+        self.debugger._console_quit = True
         state.is_paused = False
 
 
 class AgentDebugger:
     """Main debugger class that wraps and monitors agent execution"""
     
-    def __init__(self, mode: str = "console", enable_replay: bool = True):
+    def __init__(self, mode: str = "console", enable_replay: bool = True, 
+                 enable_performance_monitoring: bool = True):
         self.mode = mode
         self.enable_replay = enable_replay
+        self.enable_performance_monitoring = enable_performance_monitoring
         self.trace_events: List[TraceEvent] = []
         self.breakpoints: List[Breakpoint] = []
         self.agent_states: Dict[str, AgentState] = {}
         self.mock_registry = MockRegistry()
+        self.performance_monitor = PerformanceMonitor() if enable_performance_monitoring else None
         self.console = DebugConsole(self) if mode == "console" else None
         self._attached_agents: Dict[str, Any] = {}
+        self._watched_variables: Dict[str, Any] = {}
+        self._event_handlers: Dict[EventType, List[Callable]] = {}
+        self._console_quit: bool = False
+        
         if self.mode == "console":
             print("🟢 Console debug mode enabled. Execution will pause at breakpoints (type 'h' when paused).")
-        self._global_listeners: List[Callable[[TraceEvent], None]] = []
         
     def attach(self, agent, agent_id: Optional[str] = None):
         """Attach debugger to an agent"""
@@ -301,6 +477,15 @@ class AgentDebugger:
         self._attached_agents[agent_id] = agent
         self.agent_states[agent_id] = AgentState(agent_id)
         
+        # Emit agent creation event
+        creation_event = TraceEvent(
+            event_type=EventType.AGENT_CREATED,
+            agent_id=agent_id,
+            step_id=f"create_{int(time.time())}",
+            data={'agent_type': type(agent).__name__}
+        )
+        self._emit_event(creation_event)
+        
         # Wrap agent methods with debugging instrumentation
         self._instrument_agent(agent, agent_id)
         
@@ -309,9 +494,6 @@ class AgentDebugger:
         
     def _instrument_agent(self, agent, agent_id: str):
         """Add debugging instrumentation to agent methods"""
-        # This would vary based on the agent framework
-        # Here's a generic approach that wraps common methods
-        
         original_methods = {}
         
         # Wrap tool execution
@@ -333,6 +515,13 @@ class AgentDebugger:
                 agent.update_memory, agent_id
             )
             
+        # Wrap task execution
+        if hasattr(agent, 'execute_task'):
+            original_methods['execute_task'] = agent.execute_task
+            agent.execute_task = self._wrap_task_execution(
+                agent.execute_task, agent_id
+            )
+            
         # Store original methods for restoration
         agent._agentdb_original_methods = original_methods
         
@@ -346,17 +535,23 @@ class AgentDebugger:
                 return mock_output
                 
             # Create trace event for tool call start
+            start_time = datetime.now()
             event = TraceEvent(
                 event_type=EventType.TOOL_CALL_START,
                 agent_id=agent_id,
-                step_id=f"tool_{int(time.time())}",
+                step_id=f"tool_{int(time.time())}_{tool_name}",
                 data={
                     'tool_name': tool_name,
                     'args': args,
                     'kwargs': kwargs
                 }
             )
-            self.trace_events.append(event)
+            
+            # Performance monitoring
+            if self.performance_monitor:
+                self.performance_monitor.start_timing('tool_execution', event.id)
+                
+            self._emit_event(event)
             
             # Check breakpoints
             if self._should_break(event):
@@ -366,6 +561,9 @@ class AgentDebugger:
                 # Execute original tool
                 result = original_method(tool_name, *args, **kwargs)
                 
+                # Calculate duration
+                duration = (datetime.now() - start_time).total_seconds()
+                
                 # Create trace event for tool call end
                 end_event = TraceEvent(
                     event_type=EventType.TOOL_CALL_END,
@@ -373,11 +571,19 @@ class AgentDebugger:
                     step_id=event.step_id,
                     data={
                         'tool_name': tool_name,
-                        'result': result
+                        'result': result,
+                        'duration': duration
                     },
-                    parent_event_id=event.id
+                    parent_event_id=event.id,
+                    duration=duration
                 )
-                self.trace_events.append(end_event)
+                self._emit_event(end_event)
+                
+                # Update performance metrics
+                if self.performance_monitor:
+                    self.performance_monitor.record_metric('tool_execution_times', duration)
+                    agent_state = self.agent_states[agent_id]
+                    agent_state.performance_stats['total_tool_time'] += duration
                 
                 # Update agent state
                 state = self.agent_states[agent_id]
@@ -386,6 +592,9 @@ class AgentDebugger:
                 return result
                 
             except Exception as e:
+                # Calculate duration even for errors
+                duration = (datetime.now() - start_time).total_seconds()
+                
                 # Create error event
                 error_event = TraceEvent(
                     event_type=EventType.ERROR,
@@ -394,11 +603,18 @@ class AgentDebugger:
                     data={
                         'tool_name': tool_name,
                         'error': str(e),
-                        'error_type': type(e).__name__
+                        'error_type': type(e).__name__,
+                        'duration': duration
                     },
-                    parent_event_id=event.id
+                    parent_event_id=event.id,
+                    duration=duration
                 )
-                self.trace_events.append(error_event)
+                self._emit_event(error_event)
+                
+                # Update error count
+                state = self.agent_states[agent_id]
+                state.errors_encountered += 1
+                
                 raise
                 
         return wrapped_tool_execution
@@ -413,6 +629,7 @@ class AgentDebugger:
                 return mock_response
                 
             # Create trace event
+            start_time = datetime.now()
             event = TraceEvent(
                 event_type=EventType.LLM_CALL_START,
                 agent_id=agent_id,
@@ -422,10 +639,17 @@ class AgentDebugger:
                     'full_prompt_length': len(prompt)
                 }
             )
-            self.trace_events.append(event)
+            
+            if self.performance_monitor:
+                self.performance_monitor.start_timing('llm_call', event.id)
+                
+            self._emit_event(event)
             
             # Execute original method
             response = original_method(prompt, *args, **kwargs)
+            
+            # Calculate duration
+            duration = (datetime.now() - start_time).total_seconds()
             
             # Create end event
             end_event = TraceEvent(
@@ -434,18 +658,31 @@ class AgentDebugger:
                 step_id=event.step_id,
                 data={
                     'response': response[:200] + "..." if len(str(response)) > 200 else str(response),
-                    'full_response_length': len(str(response))
+                    'full_response_length': len(str(response)),
+                    'duration': duration
                 },
-                parent_event_id=event.id
+                parent_event_id=event.id,
+                duration=duration
             )
-            self.trace_events.append(end_event)
+            self._emit_event(end_event)
+            
+            # Update performance metrics
+            if self.performance_monitor:
+                self.performance_monitor.record_metric('llm_response_times', duration)
+                agent_state = self.agent_states[agent_id]
+                agent_state.performance_stats['total_llm_time'] += duration
+                agent_state.performance_stats['avg_response_time'] = (
+                    agent_state.performance_stats['total_llm_time'] / 
+                    (agent_state.tasks_completed + 1)
+                )
             
             # Update agent state
             state = self.agent_states[agent_id]
             state.last_llm_call = {
                 'prompt': prompt,
                 'response': response,
-                'timestamp': event.timestamp
+                'timestamp': event.timestamp,
+                'duration': duration
             }
             
             return response
@@ -466,7 +703,7 @@ class AgentDebugger:
                     'operation': 'write'
                 }
             )
-            self.trace_events.append(event)
+            self._emit_event(event)
             
             # Check breakpoints
             if self._should_break(event):
@@ -483,46 +720,134 @@ class AgentDebugger:
             
         return wrapped_memory_update
         
+    def _wrap_task_execution(self, original_method, agent_id: str):
+        """Wrap task execution with debugging"""
+        def wrapped_task_execution(task_description: str, *args, **kwargs):
+            # Create task start event
+            start_time = datetime.now()
+            event = TraceEvent(
+                event_type=EventType.TASK_START,
+                agent_id=agent_id,
+                step_id=f"task_{int(time.time())}",
+                data={
+                    'task_description': task_description,
+                    'args': args,
+                    'kwargs': kwargs
+                }
+            )
+            self._emit_event(event)
+            
+            try:
+                # Execute original method
+                result = original_method(task_description, *args, **kwargs)
+                
+                # Calculate duration
+                duration = (datetime.now() - start_time).total_seconds()
+                
+                # Create task end event
+                end_event = TraceEvent(
+                    event_type=EventType.TASK_END,
+                    agent_id=agent_id,
+                    step_id=event.step_id,
+                    data={
+                        'result': result,
+                        'duration': duration
+                    },
+                    parent_event_id=event.id,
+                    duration=duration
+                )
+                self._emit_event(end_event)
+                
+                # Update agent state
+                state = self.agent_states[agent_id]
+                state.tasks_completed += 1
+                
+                return result
+                
+            except Exception as e:
+                duration = (datetime.now() - start_time).total_seconds()
+                error_event = TraceEvent(
+                    event_type=EventType.ERROR,
+                    agent_id=agent_id,
+                    step_id=event.step_id,
+                    data={
+                        'task': task_description,
+                        'error': str(e),
+                        'duration': duration
+                    },
+                    parent_event_id=event.id,
+                    duration=duration
+                )
+                self._emit_event(error_event)
+                state = self.agent_states[agent_id]
+                state.errors_encountered += 1
+                raise
+                
+        return wrapped_task_execution
+        
     def _should_break(self, event: TraceEvent) -> bool:
         """Check if execution should break at this event"""
+        if self.mode == "console" and getattr(self, "_console_quit", False):
+            return False
+        breakpoints_to_remove = []
+        should_break = False
+        
         for bp in self.breakpoints:
             if not bp.enabled:
                 continue
                 
-            should_break = False
+            matches = False
             
             # Check breakpoint type match
             if bp.breakpoint_type == BreakpointType.BEFORE_TOOL and event.event_type == EventType.TOOL_CALL_START:
                 if bp.tool_name is None or bp.tool_name == event.data.get('tool_name'):
-                    should_break = True
+                    matches = True
                     
             elif bp.breakpoint_type == BreakpointType.AFTER_TOOL and event.event_type == EventType.TOOL_CALL_END:
-                should_break = True
+                matches = True
                 
             elif bp.breakpoint_type == BreakpointType.BEFORE_MEMORY_WRITE and event.event_type == EventType.MEMORY_WRITE:
-                should_break = True
+                matches = True
                 
             elif bp.breakpoint_type == BreakpointType.ON_ERROR and event.event_type == EventType.ERROR:
-                should_break = True
+                matches = True
 
             elif bp.breakpoint_type == BreakpointType.BEFORE_REASONING and event.event_type == EventType.REASONING_START:
-                should_break = True
+                matches = True
 
             elif bp.breakpoint_type == BreakpointType.BEFORE_LLM and event.event_type == EventType.LLM_CALL_START:
-                should_break = True
+                matches = True
 
             elif bp.breakpoint_type == BreakpointType.AFTER_LLM and event.event_type == EventType.LLM_CALL_END:
-                should_break = True
+                matches = True
+                
+            elif bp.breakpoint_type == BreakpointType.ON_AGENT_CREATE and event.event_type == EventType.AGENT_CREATED:
+                matches = True
+                
+            elif bp.breakpoint_type == BreakpointType.ON_TASK_START and event.event_type == EventType.TASK_START:
+                matches = True
+                
+            # Check agent-specific breakpoints
+            if bp.agent_id and bp.agent_id != event.agent_id:
+                matches = False
                 
             # Check conditional breakpoints
             if bp.breakpoint_type == BreakpointType.CONDITIONAL and bp.condition:
-                should_break = bp.condition(event)
+                matches = bp.condition(event)
                 
-            if should_break:
+            if matches:
                 bp.hit_count += 1
-                return True
+                should_break = True
                 
-        return False
+                # Remove temporary breakpoints after first hit
+                if bp.temporary:
+                    breakpoints_to_remove.append(bp.id)
+                
+        # Clean up temporary breakpoints
+        for bp_id in breakpoints_to_remove:
+            self.remove_breakpoint(bp_id)
+                
+        return should_break
         
     def _trigger_breakpoint(self, event: TraceEvent, agent_id: str):
         """Trigger a breakpoint and start interactive debugging"""
@@ -541,6 +866,12 @@ class AgentDebugger:
         """Remove a breakpoint by ID"""
         self.breakpoints = [bp for bp in self.breakpoints if bp.id != breakpoint_id]
         
+    def add_event_handler(self, event_type: EventType, handler: Callable[[TraceEvent], None]):
+        """Add an event handler for specific event types"""
+        if event_type not in self._event_handlers:
+            self._event_handlers[event_type] = []
+        self._event_handlers[event_type].append(handler)
+        
     def get_trace_summary(self) -> Dict[str, Any]:
         """Get a summary of the execution trace"""
         events_by_type = {}
@@ -550,13 +881,23 @@ class AgentDebugger:
                 events_by_type[event_type] = []
             events_by_type[event_type].append(event)
             
+        agent_stats = {}
+        for agent_id, state in self.agent_states.items():
+            agent_stats[agent_id] = {
+                'tasks_completed': state.tasks_completed,
+                'errors_encountered': state.errors_encountered,
+                'created_at': state.created_at.isoformat()
+            }
+            
         return {
             'total_events': len(self.trace_events),
             'events_by_type': {k: len(v) for k, v in events_by_type.items()},
             'execution_time': (
                 self.trace_events[-1].timestamp - self.trace_events[0].timestamp
             ).total_seconds() if self.trace_events else 0,
-            'agents': list(self.agent_states.keys())
+            'agents': list(self.agent_states.keys()),
+            'agent_stats': agent_stats,
+            'performance_stats': self.performance_monitor.get_statistics() if self.performance_monitor else {}
         }
         
     def export_trace(self, filename: str):
@@ -572,7 +913,8 @@ class AgentDebugger:
                     'step_id': event.step_id,
                     'data': event.data,
                     'parent_event_id': event.parent_event_id,
-                    'metadata': event.metadata
+                    'metadata': event.metadata,
+                    'duration': event.duration
                 }
                 for event in self.trace_events
             ]
@@ -581,115 +923,45 @@ class AgentDebugger:
         with open(filename, 'w') as f:
             json.dump(trace_data, f, indent=2)
         print(f"📄 Trace exported to {filename}")
-
-    def clear_traces(self, keep_last: int = 0):
-        """Clear trace events, optionally keeping the last N events."""
-        if keep_last <= 0 or keep_last >= len(self.trace_events):
-            self.trace_events = self.trace_events[-max(keep_last, 0):]
-        else:
-            self.trace_events = self.trace_events[-keep_last:]
-        print(f"🧹 Cleared traces, kept last {min(keep_last, len(self.trace_events))} events")
-
-    def add_global_listener(self, listener: Callable[[TraceEvent], None]):
-        """Register a callback invoked for every new trace event."""
-        self._global_listeners.append(listener)
-
-    def _emit_event(self, event: TraceEvent):
-        """Append event and notify listeners."""
-        self.trace_events.append(event)
-        for listener in self._global_listeners:
-            try:
-                listener(event)
-            except Exception:
-                pass
         
     def replay_from_file(self, filename: str):
-        """Load and replay trace from JSON file"""
-        with open(filename, 'r') as f:
-            trace_data = json.load(f)
+        """Replay trace from a JSON file"""
+        try:
+            with open(filename, 'r') as f:
+                trace_data = json.load(f)
+                
+            events = []
+            for event_data in trace_data['events']:
+                event = TraceEvent(
+                    id=event_data['id'],
+                    timestamp=datetime.fromisoformat(event_data['timestamp']),
+                    event_type=EventType(event_data['event_type']),
+                    agent_id=event_data['agent_id'],
+                    step_id=event_data['step_id'],
+                    data=event_data['data'],
+                    parent_event_id=event_data.get('parent_event_id'),
+                    metadata=event_data.get('metadata', {}),
+                    duration=event_data.get('duration')
+                )
+                events.append(event)
+                
+            self.mock_registry.set_replay_mode(events)
+            print(f"🎬 Replay mode activated with {len(events)} events")
             
-        # Convert back to TraceEvent objects
-        replay_events = []
-        for event_data in trace_data['events']:
-            event = TraceEvent(
-                id=event_data['id'],
-                timestamp=datetime.fromisoformat(event_data['timestamp']),
-                event_type=EventType(event_data['event_type']),
-                agent_id=event_data['agent_id'],
-                step_id=event_data['step_id'],
-                data=event_data['data'],
-                parent_event_id=event_data.get('parent_event_id'),
-                metadata=event_data.get('metadata', {})
-            )
-            replay_events.append(event)
+        except Exception as e:
+            print(f"❌ Failed to load replay file: {e}")
             
-        self.mock_registry.set_replay_mode(replay_events)
-        print(f"🎬 Replay mode enabled with {len(replay_events)} events")
-
-
-# Convenience functions and decorators
-def debug_agent(agent, mode: str = "console", **kwargs):
-    """Convenience function to quickly debug an agent"""
-    debugger = AgentDebugger(mode=mode, **kwargs)
-    return debugger.attach(agent)
-
-
-def breakpoint_on_tool(tool_name: str):
-    """Decorator to create a breakpoint on specific tool usage"""
-    def decorator(func):
-        # This would be implemented based on the specific agent framework
-        return func
-    return decorator
-
-
-# Example agent class for demonstration
-class ExampleAgent:
-    """Example agent implementation for testing the debugger"""
-    
-    def __init__(self, name: str, goal: str, tools: List[str]):
-        self.name = name
-        self.goal = goal
-        self.tools = tools
-        self.memory = {}
+    def _emit_event(self, event: TraceEvent):
+        """Emit an event to all listeners"""
+        self.trace_events.append(event)
         
-    def execute_tool(self, tool_name: str, query: str) -> str:
-        """Mock tool execution"""
-        if tool_name == "web_search":
-            return f"Search results for: {query}"
-        elif tool_name == "summarizer":
-            return f"Summary of: {query}"
-        else:
-            return f"Tool {tool_name} executed with: {query}"
-            
-    def call_llm(self, prompt: str) -> str:
-        """Mock LLM call"""
-        return f"LLM response to: {prompt[:50]}..."
-        
-    def update_memory(self, key: str, value: Any):
-        """Update agent memory"""
-        self.memory[key] = value
-        
-    def run(self, task: str) -> str:
-        """Run the agent on a task"""
-        print(f"🤖 {self.name} starting task: {task}")
-        
-        # Simulate reasoning
-        reasoning = self.call_llm(f"How should I approach: {task}")
-        
-        # Simulate tool usage
-        if "web_search" in self.tools:
-            search_results = self.execute_tool("web_search", task)
-            self.update_memory("search_results", search_results)
-            
-        if "summarizer" in self.tools:
-            summary = self.execute_tool("summarizer", task)
-            self.update_memory("summary", summary)
-            
-        final_response = self.call_llm(f"Based on the results, provide final answer for: {task}")
-        
-        print(f"✅ {self.name} completed task")
-        return final_response
+        # Call event-specific handlers
+        if event.event_type in self._event_handlers:
+            for handler in self._event_handlers[event.event_type]:
+                try:
+                    handler(event)
+                except Exception as e:
+                    print(f"Error in event handler: {e}")
 
 
-if __name__ == "__main__":
-    pass
+        

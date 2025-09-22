@@ -7,15 +7,15 @@ ROOT = pathlib.Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+HAS_LANGCHAIN = True
 try:
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
     from langchain_google_genai import ChatGoogleGenerativeAI
-except Exception as e:
-    print("Missing dependencies. Install: pip install langchain-core langchain-google-genai")
-    raise
+except Exception:
+    HAS_LANGCHAIN = False
 
-from main import AgentDebugger, Breakpoint, BreakpointType
+from main import AgentDebugger, Breakpoint, BreakpointType, EventType
 from integration import LangChainDebugger, MultiAgentOrchestrator
 
 
@@ -30,6 +30,8 @@ MEDICAL_CONTEXT = (
 
 
 def build_medical_agent():
+    if not HAS_LANGCHAIN:
+        return None
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
@@ -44,12 +46,14 @@ def build_medical_agent():
 
 
 def build_reviewer_agent():
+    if not HAS_LANGCHAIN:
+        return None
     prompt = ChatPromptTemplate.from_messages([
         (
             "system",
             "You are a clinical reviewer. Given the clinician-facing answer, provide:\n"
             "1) A patient-friendly summary (<= 2 sentences).\n"
-            "2) A confidence tag: High/Medium/Low." ,
+            "2) A confidence tag: High/Medium/Low.",
         ),
         ("human", "Clinician answer: {answer}"),
     ])
@@ -62,7 +66,7 @@ class MedicalWorkflowAgent:
     def __init__(self):
         self.tools = ["web_search", "summarizer"]
         self.memory = {}
-        self._llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+        self._llm = None
 
     def execute_tool(self, tool_name: str, query: str) -> str:
         if tool_name == "web_search":
@@ -79,13 +83,8 @@ class MedicalWorkflowAgent:
         return f"Tool {tool_name} executed with: {query}"
 
     def call_llm(self, prompt: str) -> str:
-        # Use Gemini to generate a short response
-        template = ChatPromptTemplate.from_messages([
-            ("system", "You are assisting a clinician. Be concise."),
-            ("human", "{p}")
-        ])
-        chain = template | self._llm | StrOutputParser()
-        return chain.invoke({"p": prompt})
+        # Deterministic lightweight response for easy local testing
+        return f"[LLM] {prompt[:160]}" if prompt else "[LLM]"
 
     def update_memory(self, key: str, value):
         self.memory[key] = value
@@ -104,18 +103,16 @@ class MedicalWorkflowAgent:
 
 
 def run_pipeline(question: str, console_mode: bool = False, force_error: bool = False, enable_multi: bool = True, enable_mock: bool = False):
-    if not os.getenv("GOOGLE_API_KEY"):
-        raise RuntimeError("Set GOOGLE_API_KEY environment variable before running.")
-
     mode = "console" if console_mode else "headless"
 
     # Debugger for tool/memory/LLM instrumentation (custom workflow agent)
     tool_debugger = AgentDebugger(mode=mode)
-    # Global listener example: count events
+    # Global-ish counting via registering handlers for all event types
     event_counts = {"count": 0}
     def _count_listener(ev):
         event_counts["count"] += 1
-    tool_debugger.add_global_listener(_count_listener)
+    for et in EventType:
+        tool_debugger.add_event_handler(et, _count_listener)
     workflow_agent = MedicalWorkflowAgent()
     debugged_workflow = tool_debugger.attach(workflow_agent, agent_id="medical_workflow")
 
@@ -141,24 +138,31 @@ def run_pipeline(question: str, console_mode: bool = False, force_error: bool = 
         tool_debugger.mock_registry.mock_tool("web_search", "Mocked search results from tool")
         tool_debugger.mock_registry.mock_llm("plan to answer", "Mocked LLM plan response")
 
-    # Reviewer uses LangChain LCEL; instrument with LangChainDebugger to capture reasoning events
-    review_debugger = LangChainDebugger(mode=mode)
-    review_debugger.add_global_listener(_count_listener)
+    # Reviewer uses LangChain LCEL when available; otherwise a simple reviewer
     reviewer_chain = build_reviewer_agent()
-    debugged_reviewer = review_debugger.attach(reviewer_chain, agent_id="reviewer_agent")
-    review_debugger.add_breakpoint(Breakpoint(breakpoint_type=BreakpointType.AFTER_REASONING))
-    review_debugger.add_breakpoint(Breakpoint(breakpoint_type=BreakpointType.BEFORE_REASONING))
+    reviewed_output = None
+    review_debugger = None
+    if HAS_LANGCHAIN and reviewer_chain is not None:
+        review_debugger = LangChainDebugger(mode=mode)
+        for et in EventType:
+            review_debugger.add_event_handler(et, _count_listener)
+        debugged_reviewer = review_debugger.attach(reviewer_chain, agent_id="reviewer_agent")
+        review_debugger.add_breakpoint(Breakpoint(breakpoint_type=BreakpointType.AFTER_REASONING))
+        review_debugger.add_breakpoint(Breakpoint(breakpoint_type=BreakpointType.BEFORE_REASONING))
 
     q = question
     if force_error:
         q = f"{question} force_error"  # triggers simulated web_search failure
 
     medical_answer = debugged_workflow.run(q)
-    reviewed_output = debugged_reviewer.invoke({"answer": medical_answer})
+    if HAS_LANGCHAIN and reviewer_chain is not None:
+        reviewed_output = debugged_reviewer.invoke({"answer": medical_answer})
+    else:
+        reviewed_output = f"Patient-friendly: {medical_answer[:120]}\nConfidence: Medium"
 
     # Optional: Multi-agent orchestration demo using the same LangChain debugger
     orchestration_result = None
-    if enable_multi:
+    if enable_multi and HAS_LANGCHAIN:
         # Two lightweight LCEL agents
         def build_agent(system_msg: str):
             p = ChatPromptTemplate.from_messages([
@@ -179,10 +183,11 @@ def run_pipeline(question: str, console_mode: bool = False, force_error: bool = 
         orchestrator.register("agent_B", agent_b)
 
         # Break on inter-agent messages
-        review_debugger.add_breakpoint(Breakpoint(
+        if review_debugger is not None:
+            review_debugger.add_breakpoint(Breakpoint(
             breakpoint_type=BreakpointType.CONDITIONAL,
             condition=lambda e: getattr(e, 'event_type', None) and e.event_type.value == "inter_agent_message"
-        ))
+            ))
 
         msg1 = orchestrator.send("agent_A", "agent_B", "Propose a project name for a medical note app.")
         msg2 = orchestrator.send("agent_B", "agent_A", f"Briefly critique: {msg1}")
@@ -227,8 +232,9 @@ def main():
 
     print("\nTool/Memory/LLM Debugger Summary:")
     print(dbg_tools.get_trace_summary())
-    print("\nReviewer Reasoning Debugger Summary:")
-    print(dbg_review.get_trace_summary())
+    if dbg_review is not None:
+        print("\nReviewer Reasoning Debugger Summary:")
+        print(dbg_review.get_trace_summary())
     print(f"\nGlobal event count observed by listener: {evt_counts['count']}")
 
     if orch is not None:
@@ -237,7 +243,8 @@ def main():
         print(f"B->A: {orch['b_to_a']}")
     try:
         dbg_tools.export_trace("demo_tools_trace.json")
-        dbg_review.export_trace("demo_review_trace.json")
+        if dbg_review is not None:
+            dbg_review.export_trace("demo_review_trace.json")
     except Exception:
         pass
 
