@@ -272,7 +272,8 @@ class LangChainIntegration(BaseIntegration):
             async def ainvoke(self, input_data, config=None, **kwargs):
                 if self._debug_ainvoke is None:
                     # Fallback: run sync in thread if async not available
-                    return await run_in_executor(config, self.invoke, input_data, config, **kwargs)  # type: ignore[name-defined]
+                    import asyncio
+                    return await asyncio.get_event_loop().run_in_executor(None, self.invoke, input_data, config, **kwargs)
                 return await self._debug_ainvoke(input_data, config, **kwargs)
 
             def batch(self, inputs, config=None, **kwargs):
