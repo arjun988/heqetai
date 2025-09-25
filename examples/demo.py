@@ -15,8 +15,8 @@ try:
 except Exception:
     HAS_LANGCHAIN = False
 
-from main import AgentDebugger, Breakpoint, BreakpointType, EventType
-from integration import LangChainDebugger, MultiAgentOrchestrator
+from agent_debugger import AgentDebugger, Breakpoint, BreakpointType, EventType
+from agent_debugger.integrations import LangChainDebugger, MultiAgentOrchestrator
 
 
 MEDICAL_CONTEXT = (
@@ -41,7 +41,7 @@ def build_medical_agent():
         ),
         ("human", "Question: {question}"),
     ])
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
     return prompt | llm | StrOutputParser()
 
 
@@ -57,7 +57,7 @@ def build_reviewer_agent():
         ),
         ("human", "Clinician answer: {answer}"),
     ])
-    llm = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+    llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
     return prompt | llm | StrOutputParser()
 
 
@@ -169,7 +169,7 @@ def run_pipeline(question: str, console_mode: bool = False, force_error: bool = 
                 ("system", system_msg),
                 ("human", "{input}")
             ])
-            m = ChatGoogleGenerativeAI(model="gemini-1.5-flash", temperature=0)
+            m = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=0)
             return p | m | StrOutputParser()
 
         chain_a = build_agent("You are Agent A. Propose ideas briefly.")

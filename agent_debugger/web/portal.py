@@ -1,0 +1,408 @@
+"""
+AgentDebugger Web Portal implementation.
+"""
+
+import os
+import uuid
+from datetime import datetime
+from typing import Any, Dict, List, Optional
+
+from flask import Flask, jsonify, render_template, request
+from flask_socketio import SocketIO, emit, join_room, leave_room
+
+from ..debugger import AgentDebugger
+from ..events import Breakpoint, BreakpointType, EventType, TraceEvent
+from ..state import AgentState
+
+
+app = Flask(__name__, template_folder='../../templates', static_folder='../../static')
+app.config['SECRET_KEY'] = 'agentdebugger_secret_key_2024'
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+
+class WebPortalDebugger(AgentDebugger):
+    """Extended AgentDebugger with web portal integration"""
+
+    def __init__(self, **kwargs):
+        super().__init__(mode="web", **kwargs)
+        self.web_clients: List[str] = []
+        self.event_buffer: List[TraceEvent] = []
+        self.max_buffer_size = 1000
+
+    def _emit_event(self, event: TraceEvent):
+        super()._emit_event(event)
+        self.event_buffer.append(event)
+        if len(self.event_buffer) > self.max_buffer_size:
+            self.event_buffer.pop(0)
+        socketio.emit('trace_event', {
+            'event': self._serialize_event(event),
+            'timestamp': event.timestamp.isoformat()
+        }, namespace='/')
+
+    def _serialize_event(self, event: TraceEvent) -> Dict[str, Any]:
+        return {
+            'id': event.id,
+            'timestamp': event.timestamp.isoformat(),
+            'event_type': event.event_type.value,
+            'agent_id': event.agent_id,
+            'step_id': event.step_id,
+            'data': event.data,
+            'parent_event_id': event.parent_event_id,
+            'metadata': event.metadata,
+            'duration': event.duration
+        }
+
+    def _trigger_breakpoint(self, event: TraceEvent, agent_id: str):
+        super()._trigger_breakpoint(event, agent_id)
+        socketio.emit('breakpoint_hit', {
+            'event': self._serialize_event(event),
+            'agent_id': agent_id,
+            'agent_state': self._serialize_agent_state(self.agent_states[agent_id])
+        }, namespace='/')
+
+    def _serialize_agent_state(self, state: AgentState) -> Dict[str, Any]:
+        last_llm_call = None
+        if state.last_llm_call:
+            last_llm_call = {
+                'prompt': state.last_llm_call.get('prompt', ''),
+                'response': state.last_llm_call.get('response', ''),
+                'timestamp': state.last_llm_call.get('timestamp').isoformat() if state.last_llm_call.get('timestamp') else None,
+                'duration': state.last_llm_call.get('duration', 0)
+            }
+
+        return {
+            'agent_id': state.agent_id,
+            'memory': state.memory,
+            'execution_stack': state.execution_stack,
+            'current_step': state.current_step,
+            'tool_outputs': state.tool_outputs,
+            'reasoning_log': state.reasoning_log,
+            'is_paused': state.is_paused,
+            'last_llm_call': last_llm_call,
+            'created_at': state.created_at.isoformat(),
+            'tasks_completed': state.tasks_completed,
+            'errors_encountered': state.errors_encountered,
+            'performance_stats': state.performance_stats
+        }
+
+    def get_web_summary(self) -> Dict[str, Any]:
+        return {
+            'total_events': len(self.trace_events),
+            'active_agents': len(self.agent_states),
+            'breakpoints': len(self.breakpoints),
+            'events_by_type': self._get_events_by_type(),
+            'agent_stats': self._get_agent_stats(),
+            'performance_summary': self._get_performance_summary(),
+            'recent_events': [self._serialize_event(e) for e in self.trace_events[-10:]]
+        }
+
+    def cleanup_memory(self):
+        print("🧹 Cleaning up web portal memory...")
+        self.trace_events.clear()
+        self.agent_states.clear()
+        self.breakpoints.clear()
+        self._attached_agents.clear()
+        self.event_buffer.clear()
+        self.mock_registry.clear_mocks()
+        if self.performance_monitor:
+            self.performance_monitor.metrics = {
+                'tool_execution_times': [],
+                'llm_response_times': [],
+                'memory_access_times': [],
+                'reasoning_times': []
+            }
+            self.performance_monitor.start_times.clear()
+        print("🎉 Web portal memory cleanup completed!")
+        socketio.emit('debugger_cleaned', {
+            'message': 'Debugger memory has been cleaned',
+            'timestamp': datetime.now().isoformat()
+        }, namespace='/')
+
+    def _get_events_by_type(self) -> Dict[str, int]:
+        counts: Dict[str, int] = {}
+        for event in self.trace_events:
+            et = event.event_type.value
+            counts[et] = counts.get(et, 0) + 1
+        return counts
+
+    def _get_agent_stats(self) -> Dict[str, Any]:
+        stats: Dict[str, Any] = {}
+        for agent_id, state in self.agent_states.items():
+            stats[agent_id] = {
+                'tasks_completed': state.tasks_completed,
+                'errors_encountered': state.errors_encountered,
+                'is_paused': state.is_paused,
+                'created_at': state.created_at.isoformat(),
+                'memory_size': len(state.memory),
+                'tool_outputs_count': len(state.tool_outputs)
+            }
+        return stats
+
+    def _get_performance_summary(self) -> Dict[str, Any]:
+        if not self.performance_monitor:
+            return {}
+        stats = self.performance_monitor.get_statistics()
+        return {
+            'tool_execution_times': stats.get('tool_execution_times', {}),
+            'llm_response_times': stats.get('llm_response_times', {}),
+            'memory_access_times': stats.get('memory_access_times', {}),
+            'reasoning_times': stats.get('reasoning_times', {})
+        }
+
+
+debugger_instance: Optional[AgentDebugger] = None
+debugger_lock = None  # Using SocketIO/event loop; external locking not required for this module
+
+
+def init_web_debugger() -> WebPortalDebugger:
+    global debugger_instance
+    if debugger_instance is None:
+        debugger_instance = WebPortalDebugger(
+            enable_replay=True,
+            enable_performance_monitoring=True
+        )
+    return debugger_instance
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+
+@app.route('/api/summary')
+def get_summary():
+    debugger = init_web_debugger()
+    return jsonify(debugger.get_web_summary())
+
+
+@app.route('/api/agents')
+def get_agents():
+    debugger = init_web_debugger()
+    agents: Dict[str, Any] = {}
+    for agent_id, state in debugger.agent_states.items():
+        agents[agent_id] = debugger._serialize_agent_state(state)
+    return jsonify(agents)
+
+
+@app.route('/api/events')
+def get_events():
+    debugger = init_web_debugger()
+    page = int(request.args.get('page', 1))
+    per_page = int(request.args.get('per_page', 50))
+    event_type = request.args.get('type')
+    agent_id = request.args.get('agent_id')
+    events = debugger.trace_events
+    if event_type:
+        events = [e for e in events if e.event_type.value == event_type]
+    if agent_id:
+        events = [e for e in events if e.agent_id == agent_id]
+    start = (page - 1) * per_page
+    end = start + per_page
+    page_events = events[start:end]
+    return jsonify({
+        'events': [debugger._serialize_event(e) for e in page_events],
+        'total': len(events),
+        'page': page,
+        'per_page': per_page,
+        'has_next': end < len(events),
+        'has_prev': page > 1
+    })
+
+
+@app.route('/api/breakpoints', methods=['GET', 'POST', 'DELETE'])
+def manage_breakpoints():
+    debugger = init_web_debugger()
+    if request.method == 'GET':
+        breakpoints: List[Dict[str, Any]] = []
+        for bp in debugger.breakpoints:
+            breakpoints.append({
+                'id': bp.id,
+                'breakpoint_type': bp.breakpoint_type.value,
+                'tool_name': bp.tool_name,
+                'agent_id': bp.agent_id,
+                'enabled': bp.enabled,
+                'hit_count': bp.hit_count,
+                'temporary': bp.temporary,
+                'metadata': bp.metadata
+            })
+        return jsonify(breakpoints)
+    elif request.method == 'POST':
+        data = request.json
+        bp_type = BreakpointType(data['breakpoint_type'])
+        breakpoint = Breakpoint(
+            breakpoint_type=bp_type,
+            tool_name=data.get('tool_name'),
+            agent_id=data.get('agent_id'),
+            enabled=data.get('enabled', True),
+            temporary=data.get('temporary', False),
+            metadata=data.get('metadata', {})
+        )
+        debugger.add_breakpoint(breakpoint)
+        socketio.emit('breakpoint_added', {
+            'breakpoint': {
+                'id': breakpoint.id,
+                'breakpoint_type': breakpoint.breakpoint_type.value,
+                'tool_name': breakpoint.tool_name,
+                'agent_id': breakpoint.agent_id,
+                'enabled': breakpoint.enabled,
+                'hit_count': breakpoint.hit_count,
+                'temporary': breakpoint.temporary,
+                'metadata': breakpoint.metadata
+            }
+        }, namespace='/')
+        return jsonify({'success': True, 'breakpoint_id': breakpoint.id})
+    elif request.method == 'DELETE':
+        breakpoint_id = request.json.get('breakpoint_id')
+        debugger.remove_breakpoint(breakpoint_id)
+        socketio.emit('breakpoint_removed', {'breakpoint_id': breakpoint_id}, namespace='/')
+        return jsonify({'success': True})
+
+
+@app.route('/api/agent/<agent_id>/control', methods=['POST'])
+def control_agent(agent_id):
+    try:
+        debugger = init_web_debugger()
+        if agent_id not in debugger.agent_states:
+            return jsonify({'error': 'Agent not found'}), 404
+        if not request.json:
+            return jsonify({'error': 'No JSON data provided'}), 400
+        action = request.json.get('action')
+        if not action:
+            return jsonify({'error': 'No action specified'}), 400
+        state = debugger.agent_states[agent_id]
+        if action == 'pause':
+            state.is_paused = True
+        elif action == 'resume':
+            state.is_paused = False
+        elif action == 'step':
+            state.is_paused = False
+        else:
+            return jsonify({'error': f'Unknown action: {action}'}), 400
+        socketio.emit('agent_state_changed', {
+            'agent_id': agent_id,
+            'state': debugger._serialize_agent_state(state)
+        }, namespace='/')
+        return jsonify({'success': True, 'action': action, 'is_paused': state.is_paused})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/mock', methods=['GET', 'POST', 'DELETE'])
+def manage_mocks():
+    debugger = init_web_debugger()
+    if request.method == 'GET':
+        return jsonify({
+            'tool_mocks': debugger.mock_registry._tool_mocks,
+            'llm_mocks': debugger.mock_registry._llm_mocks,
+            'replay_mode': debugger.mock_registry.is_replay_mode()
+        })
+    elif request.method == 'POST':
+        data = request.json
+        mock_type = data.get('type')
+        name = data.get('name')
+        output = data.get('output')
+        if mock_type == 'tool':
+            debugger.mock_registry.mock_tool(name, output)
+        elif mock_type == 'llm':
+            debugger.mock_registry.mock_llm(name, output)
+        socketio.emit('mock_added', {'type': mock_type, 'name': name, 'output': output}, namespace='/')
+        return jsonify({'success': True})
+    elif request.method == 'DELETE':
+        debugger.mock_registry.clear_mocks()
+        socketio.emit('mocks_cleared', {}, namespace='/')
+        return jsonify({'success': True})
+
+
+@app.route('/api/cleanup', methods=['POST'])
+def cleanup_debugger():
+    try:
+        debugger = init_web_debugger()
+        debugger.cleanup_memory()
+        return jsonify({'success': True, 'message': 'Debugger memory cleaned successfully', 'timestamp': datetime.now().isoformat()})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/export')
+def export_trace():
+    debugger = init_web_debugger()
+    filename = f"trace_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    debugger.export_trace(filename)
+    return jsonify({'success': True, 'filename': filename})
+
+
+@app.route('/api/replay', methods=['POST'])
+def replay_trace():
+    debugger = init_web_debugger()
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    try:
+        temp_filename = f"temp_replay_{uuid.uuid4().hex}.json"
+        file.save(temp_filename)
+        debugger.replay_from_file(temp_filename)
+        os.remove(temp_filename)
+        socketio.emit('replay_started', {'filename': file.filename}, namespace='/')
+        return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@socketio.on('connect')
+def handle_connect():
+    join_room('debugger_clients')
+    debugger = init_web_debugger()
+    emit('debugger_state', debugger.get_web_summary())
+
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    leave_room('debugger_clients')
+
+
+@socketio.on('request_update')
+def handle_update_request():
+    debugger = init_web_debugger()
+    emit('debugger_state', debugger.get_web_summary())
+
+
+@socketio.on('agent_command')
+def handle_agent_command(data):
+    debugger = init_web_debugger()
+    agent_id = data.get('agent_id')
+    command = data.get('command')
+    if agent_id not in debugger.agent_states:
+        emit('error', {'message': 'Agent not found'})
+        return
+    state = debugger.agent_states[agent_id]
+    if command == 'pause':
+        state.is_paused = True
+    elif command == 'resume':
+        state.is_paused = False
+    elif command == 'step':
+        state.is_paused = False
+    socketio.emit('agent_state_changed', {'agent_id': agent_id, 'state': debugger._serialize_agent_state(state)})
+
+
+def create_web_debugger(framework: str = "generic", **kwargs) -> WebPortalDebugger:
+    return WebPortalDebugger(**kwargs)
+
+
+def attach_agent_to_web(agent, agent_id: Optional[str] = None, framework: str = "generic"):
+    debugger = init_web_debugger()
+    return debugger.attach(agent, agent_id)
+
+
+if __name__ == '__main__':
+    os.makedirs('templates', exist_ok=True)
+    os.makedirs('static/css', exist_ok=True)
+    os.makedirs('static/js', exist_ok=True)
+    print("🌐 Starting AgentDebugger Web Portal...")
+    print("📊 Dashboard: http://localhost:5000")
+    print("🔧 API: http://localhost:5000/api/")
+    print("📡 WebSocket: ws://localhost:5000/socket.io/")
+    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+
+

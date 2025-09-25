@@ -14,8 +14,8 @@ except Exception as e:
     print("Missing dependency: transformers. Install with: pip install transformers")
     raise
 
-from main import Breakpoint, BreakpointType
-from integration import HuggingFaceDebugger
+from agent_debugger import Breakpoint, BreakpointType
+from agent_debugger.integrations import HuggingFaceDebugger
 
 
 def build_pipeline(task: str, model: str, device: str | None = None):

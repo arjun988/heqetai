@@ -13,8 +13,8 @@ from typing import Any, Dict
 import random
 
 # Import the web portal and existing debugger
-from web_portal import WebPortalDebugger, attach_agent_to_web, socketio, app
-from main import EventType, TraceEvent
+from agent_debugger.web import WebPortalDebugger, attach_agent_to_web, socketio, app
+from agent_debugger import EventType, TraceEvent
 
 class DemoAgent:
     """A simple demo agent that simulates various operations"""
@@ -152,7 +152,7 @@ def create_multi_agent_demo():
 
 def setup_demo_breakpoints(debugger: WebPortalDebugger):
     """Set up some demonstration breakpoints"""
-    from main import Breakpoint, BreakpointType
+    from agent_debugger import Breakpoint, BreakpointType
     
     # Break before any tool execution
     debugger.add_breakpoint(Breakpoint(
@@ -187,7 +187,7 @@ def run_web_demo():
     
     # Clean up any existing debugger state
     try:
-        from web_portal import debugger_instance
+        from agent_debugger.web import debugger_instance
         if debugger_instance:
             debugger_instance.cleanup_memory()
             print("✅ Previous debugger state cleaned up")
@@ -198,7 +198,7 @@ def run_web_demo():
     debugged_agents = create_multi_agent_demo()
     
     # Get the debugger instance
-    from web_portal import debugger_instance
+    from agent_debugger.web import debugger_instance
     if debugger_instance:
         print("🔧 Setting up demo breakpoints...")
         setup_demo_breakpoints(debugger_instance)
