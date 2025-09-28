@@ -15,6 +15,7 @@ import random
 # Import the web portal and existing debugger
 from agent_debugger.web import WebPortalDebugger, attach_agent_to_web, socketio, app
 from agent_debugger import EventType, TraceEvent
+from agent_debugger.context import ContextType, ContextPriority
 
 class DemoAgent:
     """A simple demo agent that simulates various operations"""
@@ -180,6 +181,121 @@ def setup_demo_mocks(debugger: WebPortalDebugger):
     # Mock LLM responses for certain patterns
     debugger.mock_registry.mock_llm("market trends", "Mock LLM response: Market trends are looking positive for Q4.")
 
+def setup_demo_contexts(debugger: WebPortalDebugger):
+    """Set up demonstration contexts for the web portal"""
+    print("🧠 Setting up demo contexts...")
+    
+    # Add some manual contexts to demonstrate context management
+    debugger.add_context(
+        type=ContextType.USER_PREFERENCE,
+        key="demo_theme",
+        value="dark_mode",
+        priority=ContextPriority.HIGH,
+        tags=["demo", "ui", "preference"],
+        metadata={"source": "demo_setup", "version": "1.0"}
+    )
+    
+    debugger.add_context(
+        type=ContextType.KNOWLEDGE,
+        key="domain_expertise",
+        value="Business intelligence and data analysis",
+        priority=ContextPriority.CRITICAL,
+        tags=["knowledge", "domain", "expertise"],
+        agent_id="research_agent"
+    )
+    
+    debugger.add_context(
+        type=ContextType.TASK,
+        key="current_objective",
+        value="Demonstrate AgentDebugger capabilities",
+        priority=ContextPriority.HIGH,
+        tags=["demo", "objective", "current"],
+        metadata={"deadline": "2024-12-31", "priority": "demo"}
+    )
+    
+    debugger.add_context(
+        type=ContextType.ENVIRONMENT,
+        key="demo_environment",
+        value="Development environment with web portal",
+        priority=ContextPriority.MEDIUM,
+        tags=["environment", "demo", "development"],
+        metadata={"platform": "web", "mode": "demo"}
+    )
+    
+    debugger.add_context(
+        type=ContextType.SYSTEM_STATE,
+        key="demo_status",
+        value="Active demonstration mode",
+        priority=ContextPriority.MEDIUM,
+        tags=["system", "demo", "status"],
+        metadata={"active": True, "mode": "demonstration"}
+    )
+    
+    print("✅ Demo contexts added successfully")
+
+def add_dynamic_contexts(debugger: WebPortalDebugger):
+    """Add dynamic contexts during demo execution"""
+    import time
+    import random
+    
+    context_templates = [
+        {
+            "type": ContextType.CONVERSATION,
+            "key": "user_query",
+            "value": "How can I optimize my workflow?",
+            "priority": ContextPriority.MEDIUM,
+            "tags": ["conversation", "user", "query"]
+        },
+        {
+            "type": ContextType.KNOWLEDGE,
+            "key": "learned_pattern",
+            "value": "Users prefer step-by-step instructions",
+            "priority": ContextPriority.HIGH,
+            "tags": ["learning", "pattern", "user_behavior"]
+        },
+        {
+            "type": ContextType.MEMORY,
+            "key": "session_data",
+            "value": "Current session: 15 minutes active",
+            "priority": ContextPriority.LOW,
+            "tags": ["session", "temporary", "runtime"]
+        },
+        {
+            "type": ContextType.SYSTEM_STATE,
+            "key": "performance_metric",
+            "value": "CPU usage: 45%, Memory: 2.1GB",
+            "priority": ContextPriority.MEDIUM,
+            "tags": ["performance", "system", "monitoring"]
+        }
+    ]
+    
+    while True:
+        try:
+            time.sleep(random.uniform(10, 20))  # Add context every 10-20 seconds
+            
+            # Pick a random context template
+            template = random.choice(context_templates)
+            
+            # Add some randomness to the context
+            context_key = f"{template['key']}_{int(time.time())}"
+            context_value = template['value'] + f" (updated at {datetime.now().strftime('%H:%M:%S')})"
+            
+            debugger.add_context(
+                type=template['type'],
+                key=context_key,
+                value=context_value,
+                priority=template['priority'],
+                tags=template['tags'],
+                agent_id=random.choice(["research_agent", "analysis_agent", "report_agent"]),
+                metadata={"dynamic": True, "timestamp": datetime.now().isoformat()}
+            )
+            
+            print(f"🧠 Added dynamic context: {context_key}")
+            
+        except Exception as e:
+            print(f"❌ Error adding dynamic context: {e}")
+            time.sleep(5)
+
 def run_web_demo():
     """Run the complete web portal demonstration"""
     print("🌐 Starting AgentDebugger Web Portal Demo")
@@ -205,6 +321,9 @@ def run_web_demo():
         
         print("🎭 Setting up demo mocks...")
         setup_demo_mocks(debugger_instance)
+        
+        print("🧠 Setting up demo contexts...")
+        setup_demo_contexts(debugger_instance)
     
     print("\n📊 Web portal is running at: http://localhost:5000")
     print("🔧 You can:")
@@ -214,6 +333,10 @@ def run_web_demo():
     print("  - Add/manage mocks")
     print("  - Export traces")
     print("  - Control agent execution")
+    print("  - Manage contexts (NEW!)")
+    print("  - Search and filter contexts")
+    print("  - Export/import contexts")
+    print("  - View context analytics")
     
     # Start agent activity in separate threads
     threads = []
@@ -227,8 +350,20 @@ def run_web_demo():
         threads.append(thread)
         print(f"🤖 Started {agent_id} simulation thread")
     
+    # Start dynamic context generation thread
+    if debugger_instance:
+        context_thread = threading.Thread(
+            target=add_dynamic_contexts,
+            args=(debugger_instance,),
+            daemon=True
+        )
+        context_thread.start()
+        threads.append(context_thread)
+        print("🧠 Started dynamic context generation thread")
+    
     print(f"\n🎉 Demo is running with {len(debugged_agents)} agents!")
     print("💡 Open http://localhost:5000 in your browser to see the web portal")
+    print("🧠 Navigate to the 'Context' tab to see context management features")
     print("⏹️  Press Ctrl+C to stop the demo")
     
     return threads

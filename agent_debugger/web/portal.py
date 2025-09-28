@@ -11,6 +11,7 @@ from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
 from ..debugger import AgentDebugger
+from ..context import ContextType, ContextPriority
 from ..events import Breakpoint, BreakpointType, EventType, TraceEvent
 from ..state import AgentState
 
@@ -24,7 +25,7 @@ class WebPortalDebugger(AgentDebugger):
     """Extended AgentDebugger with web portal integration"""
 
     def __init__(self, **kwargs):
-        super().__init__(mode="web", **kwargs)
+        super().__init__(mode="web", enable_context_management=True, **kwargs)
         self.web_clients: List[str] = []
         self.event_buffer: List[TraceEvent] = []
         self.max_buffer_size = 1000
@@ -86,7 +87,7 @@ class WebPortalDebugger(AgentDebugger):
         }
 
     def get_web_summary(self) -> Dict[str, Any]:
-        return {
+        summary = {
             'total_events': len(self.trace_events),
             'active_agents': len(self.agent_states),
             'breakpoints': len(self.breakpoints),
@@ -95,6 +96,12 @@ class WebPortalDebugger(AgentDebugger):
             'performance_summary': self._get_performance_summary(),
             'recent_events': [self._serialize_event(e) for e in self.trace_events[-10:]]
         }
+        
+        # Add context summary if context management is enabled
+        if self.context_manager:
+            summary['context_summary'] = self.get_context_summary()
+        
+        return summary
 
     def cleanup_memory(self):
         print("🧹 Cleaning up web portal memory...")
@@ -346,6 +353,216 @@ def replay_trace():
         os.remove(temp_filename)
         socketio.emit('replay_started', {'filename': file.filename}, namespace='/')
         return jsonify({'success': True})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+# Context Management API Endpoints
+
+@app.route('/api/contexts', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def manage_contexts():
+    debugger = init_web_debugger()
+    if not debugger.context_manager:
+        return jsonify({'error': 'Context management is not enabled'}), 400
+    
+    if request.method == 'GET':
+        # Get contexts with optional filters
+        query = request.args.get('query', '')
+        type_filter = request.args.get('type')
+        agent_filter = request.args.get('agent_id')
+        tag_filter = request.args.getlist('tags')
+        priority_filter = request.args.getlist('priority')
+        
+        # Convert string filters to enums
+        type_enum = ContextType(type_filter) if type_filter else None
+        priority_enums = [ContextPriority(p) for p in priority_filter] if priority_filter else None
+        
+        contexts = debugger.search_contexts(
+            query=query,
+            type_filter=type_enum,
+            agent_filter=agent_filter,
+            tag_filter=tag_filter,
+            priority_filter=priority_enums
+        )
+        
+        return jsonify([context.to_dict() for context in contexts])
+    
+    elif request.method == 'POST':
+        # Add new context
+        data = request.json
+        try:
+            context_id = debugger.add_context(
+                type=ContextType(data['type']),
+                key=data['key'],
+                value=data['value'],
+                priority=ContextPriority(data.get('priority', 'medium')),
+                expires_in=None,  # Could be added later
+                tags=data.get('tags', []),
+                metadata=data.get('metadata', {}),
+                agent_id=data.get('agent_id'),
+                step_id=data.get('step_id')
+            )
+            
+            socketio.emit('context_added', {
+                'context_id': context_id,
+                'type': data['type'],
+                'key': data['key']
+            }, namespace='/')
+            
+            return jsonify({'success': True, 'context_id': context_id})
+        except Exception as e:
+            return jsonify({'error': str(e)}), 400
+    
+    elif request.method == 'PUT':
+        # Update context
+        data = request.json
+        context_id = data.get('context_id')
+        if not context_id:
+            return jsonify({'error': 'context_id is required'}), 400
+        
+        updates = {k: v for k, v in data.items() if k != 'context_id'}
+        success = debugger.update_context(context_id, **updates)
+        
+        if success:
+            socketio.emit('context_updated', {
+                'context_id': context_id,
+                'updates': updates
+            }, namespace='/')
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Context not found'}), 404
+    
+    elif request.method == 'DELETE':
+        # Delete context
+        data = request.json
+        context_id = data.get('context_id')
+        if not context_id:
+            return jsonify({'error': 'context_id is required'}), 400
+        
+        success = debugger.delete_context(context_id)
+        if success:
+            socketio.emit('context_deleted', {
+                'context_id': context_id
+            }, namespace='/')
+            return jsonify({'success': True})
+        else:
+            return jsonify({'error': 'Context not found'}), 404
+
+
+@app.route('/api/contexts/summary')
+def get_context_summary():
+    debugger = init_web_debugger()
+    if not debugger.context_manager:
+        return jsonify({'error': 'Context management is not enabled'}), 400
+    
+    return jsonify(debugger.get_context_summary())
+
+
+@app.route('/api/contexts/export')
+def export_contexts():
+    debugger = init_web_debugger()
+    if not debugger.context_manager:
+        return jsonify({'error': 'Context management is not enabled'}), 400
+    
+    format_type = request.args.get('format', 'json')
+    include_expired = request.args.get('include_expired', 'false').lower() == 'true'
+    
+    # Get filters from query parameters
+    filters = {}
+    if request.args.get('type'):
+        filters['type'] = request.args.get('type')
+    if request.args.get('agent_id'):
+        filters['agent_id'] = request.args.get('agent_id')
+    if request.args.getlist('tags'):
+        filters['tags'] = request.args.getlist('tags')
+    
+    try:
+        exported_data = debugger.export_contexts(
+            format=format_type,
+            include_expired=include_expired,
+            filters=filters if filters else None
+        )
+        
+        return jsonify({
+            'success': True,
+            'data': exported_data,
+            'format': format_type,
+            'timestamp': datetime.now().isoformat()
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/contexts/import', methods=['POST'])
+def import_contexts():
+    debugger = init_web_debugger()
+    if not debugger.context_manager:
+        return jsonify({'error': 'Context management is not enabled'}), 400
+    
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+    
+    format_type = request.form.get('format', 'json')
+    
+    try:
+        # Read file content
+        file_content = file.read().decode('utf-8')
+        
+        # Import contexts
+        imported_count = debugger.import_contexts(file_content, format_type)
+        
+        socketio.emit('contexts_imported', {
+            'count': imported_count,
+            'format': format_type
+        }, namespace='/')
+        
+        return jsonify({
+            'success': True,
+            'imported_count': imported_count,
+            'format': format_type
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/contexts/clear', methods=['POST'])
+def clear_contexts():
+    debugger = init_web_debugger()
+    if not debugger.context_manager:
+        return jsonify({'error': 'Context management is not enabled'}), 400
+    
+    data = request.json or {}
+    type_filter = data.get('type')
+    agent_filter = data.get('agent_id')
+    tag_filter = data.get('tags', [])
+    
+    # Convert string to enum if provided
+    type_enum = ContextType(type_filter) if type_filter else None
+    
+    try:
+        cleared_count = debugger.clear_contexts(
+            type_filter=type_enum,
+            agent_filter=agent_filter,
+            tag_filter=tag_filter
+        )
+        
+        socketio.emit('contexts_cleared', {
+            'count': cleared_count,
+            'filters': {
+                'type': type_filter,
+                'agent_id': agent_filter,
+                'tags': tag_filter
+            }
+        }, namespace='/')
+        
+        return jsonify({
+            'success': True,
+            'cleared_count': cleared_count
+        })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 

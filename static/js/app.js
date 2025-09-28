@@ -11,6 +11,7 @@ class AgentDebuggerApp {
         this.agents = {};
         this.events = [];
         this.breakpoints = [];
+        this.contexts = [];
         this.performanceChart = null;
         
         this.init();
@@ -73,6 +74,33 @@ class AgentDebuggerApp {
             this.refreshAgents();
             this.refreshEvents();
             this.refreshBreakpoints();
+            this.refreshContexts();
+        });
+        
+        // Context management events
+        this.socket.on('context_added', (data) => {
+            this.showNotification(`Context added: ${data.key}`, 'success');
+            this.refreshContexts();
+        });
+        
+        this.socket.on('context_updated', (data) => {
+            this.showNotification(`Context updated: ${data.context_id}`, 'info');
+            this.refreshContexts();
+        });
+        
+        this.socket.on('context_deleted', (data) => {
+            this.showNotification(`Context deleted: ${data.context_id}`, 'warning');
+            this.refreshContexts();
+        });
+        
+        this.socket.on('contexts_imported', (data) => {
+            this.showNotification(`${data.count} contexts imported`, 'success');
+            this.refreshContexts();
+        });
+        
+        this.socket.on('contexts_cleared', (data) => {
+            this.showNotification(`${data.count} contexts cleared`, 'warning');
+            this.refreshContexts();
         });
         
         this.socket.on('error', (data) => {
@@ -109,6 +137,9 @@ class AgentDebuggerApp {
             
             // Load breakpoints
             await this.refreshBreakpoints();
+            
+            // Load contexts
+            await this.refreshContexts();
             
         } catch (error) {
             console.error('Failed to load initial data:', error);
@@ -213,6 +244,28 @@ class AgentDebuggerApp {
             this.renderBreakpoints();
         } catch (error) {
             console.error('Failed to refresh breakpoints:', error);
+        }
+    }
+    
+    async refreshContexts() {
+        try {
+            const response = await fetch('/api/contexts');
+            const contexts = await response.json();
+            this.contexts = contexts;
+            this.renderContexts();
+            this.updateContextSummary();
+        } catch (error) {
+            console.error('Failed to refresh contexts:', error);
+        }
+    }
+    
+    async updateContextSummary() {
+        try {
+            const response = await fetch('/api/contexts/summary');
+            const summary = await response.json();
+            this.renderContextSummary(summary);
+        } catch (error) {
+            console.error('Failed to load context summary:', error);
         }
     }
     
@@ -673,6 +726,203 @@ class AgentDebuggerApp {
     showError(message) {
         this.showNotification(message, 'danger');
     }
+    
+    // Context Management Methods
+    
+    renderContexts() {
+        const container = document.getElementById('contexts-container');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        
+        if (this.contexts.length === 0) {
+            container.innerHTML = '<p class="text-muted">No contexts found</p>';
+            return;
+        }
+        
+        this.contexts.forEach(context => {
+            const contextItem = this.createContextItem(context);
+            container.appendChild(contextItem);
+        });
+    }
+    
+    createContextItem(context) {
+        const div = document.createElement('div');
+        div.className = 'card mb-3 context-item';
+        div.style.cursor = 'pointer';
+        div.onclick = () => this.showContextDetails(context);
+        
+        const priorityClass = this.getPriorityClass(context.priority);
+        const typeIcon = this.getTypeIcon(context.type);
+        
+        div.innerHTML = `
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div class="flex-grow-1">
+                        <h6 class="card-title">
+                            <i class="${typeIcon}"></i>
+                            <span class="badge ${priorityClass}">${context.priority}</span>
+                            ${context.key}
+                        </h6>
+                        <p class="card-text">
+                            <strong>Type:</strong> ${context.type} | 
+                            <strong>Agent:</strong> ${context.agent_id || 'N/A'} |
+                            <strong>Created:</strong> ${new Date(context.created_at).toLocaleString()}
+                        </p>
+                        <div class="context-preview">
+                            ${this.truncateText(context.value, 100)}
+                        </div>
+                        ${context.tags && context.tags.length > 0 ? `
+                            <div class="mt-2">
+                                ${context.tags.map(tag => `<span class="badge bg-secondary me-1">${tag}</span>`).join('')}
+                            </div>
+                        ` : ''}
+                    </div>
+                    <div class="btn-group-vertical" role="group">
+                        <button class="btn btn-sm btn-outline-primary" onclick="event.stopPropagation(); app.editContext('${context.id}')">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="event.stopPropagation(); app.deleteContext('${context.id}')">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        return div;
+    }
+    
+    getPriorityClass(priority) {
+        const classMap = {
+            'critical': 'bg-danger',
+            'high': 'bg-warning',
+            'medium': 'bg-info',
+            'low': 'bg-secondary',
+            'archive': 'bg-dark'
+        };
+        return classMap[priority] || 'bg-secondary';
+    }
+    
+    getTypeIcon(type) {
+        const iconMap = {
+            'memory': 'fas fa-memory',
+            'conversation': 'fas fa-comments',
+            'knowledge': 'fas fa-brain',
+            'task': 'fas fa-tasks',
+            'environment': 'fas fa-globe',
+            'user_preference': 'fas fa-user-cog',
+            'system_state': 'fas fa-cogs'
+        };
+        return iconMap[type] || 'fas fa-info-circle';
+    }
+    
+    truncateText(text, maxLength) {
+        if (typeof text !== 'string') {
+            text = JSON.stringify(text);
+        }
+        return text.length > maxLength ? text.substring(0, maxLength) + '...' : text;
+    }
+    
+    renderContextSummary(summary) {
+        const container = document.getElementById('context-summary');
+        if (!container) return;
+        
+        container.innerHTML = `
+            <div class="row">
+                <div class="col-md-3">
+                    <strong>Total Items:</strong> ${summary.total_items || 0}
+                </div>
+                <div class="col-md-3">
+                    <strong>By Type:</strong> ${Object.entries(summary.by_type || {}).map(([type, count]) => `${type}: ${count}`).join(', ')}
+                </div>
+                <div class="col-md-3">
+                    <strong>By Priority:</strong> ${Object.entries(summary.by_priority || {}).map(([priority, count]) => `${priority}: ${count}`).join(', ')}
+                </div>
+                <div class="col-md-3">
+                    <strong>Expired:</strong> ${summary.expired_count || 0}
+                </div>
+            </div>
+        `;
+    }
+    
+    showContextDetails(context) {
+        const modalContent = `
+            <div class="row">
+                <div class="col-md-6">
+                    <h6><i class="fas fa-info-circle"></i> Context Details</h6>
+                    <div class="json-viewer">${JSON.stringify({
+                        id: context.id,
+                        type: context.type,
+                        key: context.key,
+                        priority: context.priority,
+                        agent_id: context.agent_id,
+                        step_id: context.step_id,
+                        created_at: context.created_at,
+                        updated_at: context.updated_at,
+                        expires_at: context.expires_at,
+                        tags: context.tags,
+                        metadata: context.metadata
+                    }, null, 2)}</div>
+                </div>
+                <div class="col-md-6">
+                    <h6><i class="fas fa-file-alt"></i> Value</h6>
+                    <div class="json-viewer" style="max-height: 400px; overflow-y: auto;">
+                        ${typeof context.value === 'string' ? context.value : JSON.stringify(context.value, null, 2)}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        document.getElementById('event-detail-content').innerHTML = modalContent;
+        new bootstrap.Modal(document.getElementById('eventDetailModal')).show();
+    }
+    
+    async editContext(contextId) {
+        const context = this.contexts.find(c => c.id === contextId);
+        if (!context) return;
+        
+        // Populate edit form (could be a separate modal)
+        document.getElementById('context-type').value = context.type;
+        document.getElementById('context-priority').value = context.priority;
+        document.getElementById('context-key').value = context.key;
+        document.getElementById('context-value').value = typeof context.value === 'string' ? context.value : JSON.stringify(context.value);
+        document.getElementById('context-tags').value = context.tags ? context.tags.join(', ') : '';
+        document.getElementById('context-agent').value = context.agent_id || '';
+        document.getElementById('context-metadata').value = context.metadata ? JSON.stringify(context.metadata) : '';
+        
+        // Show modal
+        new bootstrap.Modal(document.getElementById('addContextModal')).show();
+        
+        // Store context ID for update
+        document.getElementById('addContextModal').dataset.contextId = contextId;
+    }
+    
+    async deleteContext(contextId) {
+        if (!confirm('Are you sure you want to delete this context?')) return;
+        
+        try {
+            const response = await fetch('/api/contexts', {
+                method: 'DELETE',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ context_id: contextId })
+            });
+            
+            const result = await response.json();
+            
+            if (response.ok) {
+                this.showNotification('Context deleted successfully', 'success');
+                this.refreshContexts();
+            } else {
+                this.showError(`Failed to delete context: ${result.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error deleting context:', error);
+            this.showError('Failed to delete context');
+        }
+    }
 }
 
 // Global functions for HTML onclick handlers
@@ -788,6 +1038,241 @@ function refreshAgents() {
 
 function refreshEvents() {
     app.refreshEvents();
+}
+
+// Context Management Global Functions
+
+function showAddContextModal() {
+    // Clear form
+    document.getElementById('context-form').reset();
+    document.getElementById('addContextModal').dataset.contextId = '';
+    
+    // Populate agent dropdown
+    populateAgentDropdown('context-agent');
+    
+    new bootstrap.Modal(document.getElementById('addContextModal')).show();
+}
+
+function showImportContextModal() {
+    new bootstrap.Modal(document.getElementById('importContextModal')).show();
+}
+
+function showClearContextModal() {
+    // Populate agent dropdown for clear modal
+    populateAgentDropdown('clear-agent-filter');
+    
+    new bootstrap.Modal(document.getElementById('clearContextModal')).show();
+}
+
+function populateAgentDropdown(selectId) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    
+    // Clear existing options except first
+    select.innerHTML = '<option value="">All Agents</option>';
+    
+    // Add agents from app.agents
+    Object.keys(app.agents).forEach(agentId => {
+        const option = document.createElement('option');
+        option.value = agentId;
+        option.textContent = agentId;
+        select.appendChild(option);
+    });
+}
+
+function addContext() {
+    const form = document.getElementById('context-form');
+    const contextId = document.getElementById('addContextModal').dataset.contextId;
+    
+    const data = {
+        type: document.getElementById('context-type').value,
+        key: document.getElementById('context-key').value,
+        value: document.getElementById('context-value').value,
+        priority: document.getElementById('context-priority').value,
+        tags: document.getElementById('context-tags').value.split(',').map(tag => tag.trim()).filter(tag => tag),
+        agent_id: document.getElementById('context-agent').value || null,
+        metadata: {}
+    };
+    
+    // Parse metadata if provided
+    const metadataText = document.getElementById('context-metadata').value.trim();
+    if (metadataText) {
+        try {
+            data.metadata = JSON.parse(metadataText);
+        } catch (e) {
+            app.showError('Invalid JSON in metadata field');
+            return;
+        }
+    }
+    
+    const url = contextId ? '/api/contexts' : '/api/contexts';
+    const method = contextId ? 'PUT' : 'POST';
+    
+    if (contextId) {
+        data.context_id = contextId;
+    }
+    
+    fetch(url, {
+        method: method,
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('addContextModal')).hide();
+            form.reset();
+            app.refreshContexts();
+            app.showNotification(contextId ? 'Context updated successfully' : 'Context added successfully', 'success');
+        } else {
+            app.showError(`Failed to ${contextId ? 'update' : 'add'} context: ${result.error || 'Unknown error'}`);
+        }
+    })
+    .catch(error => {
+        console.error(`Error ${contextId ? 'updating' : 'adding'} context:`, error);
+        app.showError(`Failed to ${contextId ? 'update' : 'add'} context`);
+    });
+}
+
+function importContexts() {
+    const fileInput = document.getElementById('context-file');
+    const format = document.getElementById('import-format').value;
+    
+    if (!fileInput.files[0]) {
+        app.showError('Please select a file');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('file', fileInput.files[0]);
+    formData.append('format', format);
+    
+    fetch('/api/contexts/import', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('importContextModal')).hide();
+            app.showNotification(`${result.imported_count} contexts imported successfully`, 'success');
+            app.refreshContexts();
+        } else {
+            app.showError(`Failed to import contexts: ${result.error || 'Unknown error'}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error importing contexts:', error);
+        app.showError('Failed to import contexts');
+    });
+}
+
+function clearContexts() {
+    const typeFilter = document.getElementById('clear-type-filter').value;
+    const agentFilter = document.getElementById('clear-agent-filter').value;
+    const tagFilter = document.getElementById('clear-tag-filter').value.split(',').map(tag => tag.trim()).filter(tag => tag);
+    
+    const data = {};
+    if (typeFilter) data.type = typeFilter;
+    if (agentFilter) data.agent_id = agentFilter;
+    if (tagFilter.length > 0) data.tags = tagFilter;
+    
+    fetch('/api/contexts/clear', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(data)
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            bootstrap.Modal.getInstance(document.getElementById('clearContextModal')).hide();
+            app.showNotification(`${result.cleared_count} contexts cleared successfully`, 'warning');
+            app.refreshContexts();
+        } else {
+            app.showError(`Failed to clear contexts: ${result.error || 'Unknown error'}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error clearing contexts:', error);
+        app.showError('Failed to clear contexts');
+    });
+}
+
+function exportContexts() {
+    const format = prompt('Export format (json/csv):', 'json');
+    if (!format) return;
+    
+    let url = `/api/contexts/export?format=${format}`;
+    
+    // Add current filters if any
+    const typeFilter = document.getElementById('context-type-filter')?.value;
+    const agentFilter = document.getElementById('context-agent-filter')?.value;
+    const tagFilter = document.getElementById('context-tag-filter')?.value;
+    
+    if (typeFilter) url += `&type=${typeFilter}`;
+    if (agentFilter) url += `&agent_id=${agentFilter}`;
+    if (tagFilter) url += `&tags=${tagFilter}`;
+    
+    fetch(url)
+    .then(response => response.json())
+    .then(result => {
+        if (result.success) {
+            // Download the data
+            const blob = new Blob([result.data], { type: 'application/octet-stream' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `contexts_export_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.${format}`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            window.URL.revokeObjectURL(url);
+            
+            app.showNotification('Contexts exported successfully', 'success');
+        } else {
+            app.showError(`Failed to export contexts: ${result.error || 'Unknown error'}`);
+        }
+    })
+    .catch(error => {
+        console.error('Error exporting contexts:', error);
+        app.showError('Failed to export contexts');
+    });
+}
+
+function filterContexts() {
+    const query = document.getElementById('context-search').value;
+    const typeFilter = document.getElementById('context-type-filter').value;
+    const priorityFilter = document.getElementById('context-priority-filter').value;
+    const agentFilter = document.getElementById('context-agent-filter').value;
+    const tagFilter = document.getElementById('context-tag-filter').value;
+    
+    let url = '/api/contexts?';
+    const params = new URLSearchParams();
+    
+    if (query) params.append('query', query);
+    if (typeFilter) params.append('type', typeFilter);
+    if (priorityFilter) params.append('priority', priorityFilter);
+    if (agentFilter) params.append('agent_id', agentFilter);
+    if (tagFilter) {
+        tagFilter.split(',').forEach(tag => params.append('tags', tag.trim()));
+    }
+    
+    url += params.toString();
+    
+    fetch(url)
+    .then(response => response.json())
+    .then(contexts => {
+        app.contexts = contexts;
+        app.renderContexts();
+    })
+    .catch(error => {
+        console.error('Error filtering contexts:', error);
+        app.showError('Failed to filter contexts');
+    });
 }
 
 // Initialize the application

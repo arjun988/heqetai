@@ -4,10 +4,11 @@ Core AgentDebugger class and instrumentation wrappers.
 
 import json
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 
 from .console import DebugConsole
+from .context import ContextManager, ContextType, ContextPriority
 from .events import Breakpoint, EventType, TraceEvent
 from .mocks import MockRegistry
 from .performance import PerformanceMonitor
@@ -18,15 +19,17 @@ class AgentDebugger:
     """Main debugger class that wraps and monitors agent execution"""
 
     def __init__(self, mode: str = "console", enable_replay: bool = True,
-                 enable_performance_monitoring: bool = True):
+                 enable_performance_monitoring: bool = True, enable_context_management: bool = True):
         self.mode = mode
         self.enable_replay = enable_replay
         self.enable_performance_monitoring = enable_performance_monitoring
+        self.enable_context_management = enable_context_management
         self.trace_events: List[TraceEvent] = []
         self.breakpoints: List[Breakpoint] = []
         self.agent_states: Dict[str, AgentState] = {}
         self.mock_registry = MockRegistry()
         self.performance_monitor = PerformanceMonitor() if enable_performance_monitoring else None
+        self.context_manager = ContextManager() if enable_context_management else None
         self.console = DebugConsole(self) if mode == "console" else None
         self._attached_agents: Dict[str, Any] = {}
         self._watched_variables: Dict[str, Any] = {}
@@ -379,5 +382,181 @@ class AgentDebugger:
                     handler(event)
                 except Exception as e:
                     print(f"Error in event handler: {e}")
+        
+        # Auto-capture context from events if context management is enabled
+        if self.context_manager and self.enable_context_management:
+            self._auto_capture_context(event)
+
+    # Context Management Methods
+    
+    def add_context(self, 
+                   type: ContextType,
+                   key: str,
+                   value: Any,
+                   priority: ContextPriority = ContextPriority.MEDIUM,
+                   expires_in: Optional[timedelta] = None,
+                   tags: Optional[List[str]] = None,
+                   metadata: Optional[Dict[str, Any]] = None,
+                   agent_id: Optional[str] = None,
+                   step_id: Optional[str] = None) -> Optional[str]:
+        """Add a new context item"""
+        if not self.context_manager:
+            print("❌ Context management is not enabled")
+            return None
+        
+        return self.context_manager.add_context(
+            type=type,
+            key=key,
+            value=value,
+            priority=priority,
+            expires_in=expires_in,
+            tags=tags,
+            metadata=metadata,
+            agent_id=agent_id,
+            step_id=step_id
+        )
+    
+    def get_context(self, context_id: str):
+        """Get a context item by ID"""
+        if not self.context_manager:
+            return None
+        return self.context_manager.get_context(context_id)
+    
+    def search_contexts(self, 
+                       query: str,
+                       type_filter: Optional[ContextType] = None,
+                       agent_filter: Optional[str] = None,
+                       tag_filter: Optional[List[str]] = None,
+                       priority_filter: Optional[List[ContextPriority]] = None):
+        """Search context items with various filters"""
+        if not self.context_manager:
+            return []
+        return self.context_manager.search_contexts(
+            query=query,
+            type_filter=type_filter,
+            agent_filter=agent_filter,
+            tag_filter=tag_filter,
+            priority_filter=priority_filter
+        )
+    
+    def update_context(self, context_id: str, **updates) -> bool:
+        """Update a context item"""
+        if not self.context_manager:
+            return False
+        return self.context_manager.update_context(context_id, **updates)
+    
+    def delete_context(self, context_id: str) -> bool:
+        """Delete a context item"""
+        if not self.context_manager:
+            return False
+        return self.context_manager.delete_context(context_id)
+    
+    def clear_contexts(self, 
+                      type_filter: Optional[ContextType] = None,
+                      agent_filter: Optional[str] = None,
+                      tag_filter: Optional[List[str]] = None) -> int:
+        """Clear context items with optional filters"""
+        if not self.context_manager:
+            return 0
+        return self.context_manager.clear_contexts(
+            type_filter=type_filter,
+            agent_filter=agent_filter,
+            tag_filter=tag_filter
+        )
+    
+    def get_context_summary(self) -> Dict[str, Any]:
+        """Get a summary of all contexts"""
+        if not self.context_manager:
+            return {"error": "Context management is not enabled"}
+        return self.context_manager.get_context_summary()
+    
+    def export_contexts(self, 
+                      format: str = "json",
+                      include_expired: bool = False,
+                      filters: Optional[Dict[str, Any]] = None) -> str:
+        """Export contexts in various formats"""
+        if not self.context_manager:
+            return ""
+        return self.context_manager.export_contexts(
+            format=format,
+            include_expired=include_expired,
+            filters=filters
+        )
+    
+    def import_contexts(self, data: str, format: str = "json") -> int:
+        """Import contexts from various formats"""
+        if not self.context_manager:
+            return 0
+        return self.context_manager.import_contexts(data, format)
+    
+    def _auto_capture_context(self, event: TraceEvent):
+        """Automatically capture context from trace events"""
+        if not self.context_manager:
+            return
+        
+        # Capture different types of context based on event type
+        if event.event_type == EventType.MEMORY_WRITE:
+            # Capture memory writes as context
+            self.context_manager.add_context(
+                type=ContextType.MEMORY,
+                key=event.data.get('key', 'unknown'),
+                value=event.data.get('value'),
+                priority=ContextPriority.MEDIUM,
+                agent_id=event.agent_id,
+                step_id=event.step_id,
+                tags=['auto-captured', 'memory-write']
+            )
+        
+        elif event.event_type == EventType.LLM_CALL_END:
+            # Capture LLM responses as knowledge context
+            self.context_manager.add_context(
+                type=ContextType.KNOWLEDGE,
+                key=f"llm_response_{event.step_id}",
+                value=event.data.get('response'),
+                priority=ContextPriority.HIGH,
+                agent_id=event.agent_id,
+                step_id=event.step_id,
+                tags=['auto-captured', 'llm-response']
+            )
+        
+        elif event.event_type == EventType.TOOL_CALL_END:
+            # Capture tool outputs as knowledge context
+            self.context_manager.add_context(
+                type=ContextType.KNOWLEDGE,
+                key=f"tool_output_{event.data.get('tool_name', 'unknown')}",
+                value=event.data.get('result'),
+                priority=ContextPriority.MEDIUM,
+                agent_id=event.agent_id,
+                step_id=event.step_id,
+                tags=['auto-captured', 'tool-output', event.data.get('tool_name', 'unknown')]
+            )
+        
+        elif event.event_type == EventType.TASK_START:
+            # Capture task descriptions as task context
+            self.context_manager.add_context(
+                type=ContextType.TASK,
+                key=f"task_{event.step_id}",
+                value=event.data.get('task_description'),
+                priority=ContextPriority.HIGH,
+                agent_id=event.agent_id,
+                step_id=event.step_id,
+                tags=['auto-captured', 'task']
+            )
+        
+        elif event.event_type == EventType.ERROR:
+            # Capture errors as system state context
+            self.context_manager.add_context(
+                type=ContextType.SYSTEM_STATE,
+                key=f"error_{event.step_id}",
+                value={
+                    'error': event.data.get('error'),
+                    'error_type': event.data.get('error_type'),
+                    'context': event.data
+                },
+                priority=ContextPriority.CRITICAL,
+                agent_id=event.agent_id,
+                step_id=event.step_id,
+                tags=['auto-captured', 'error', event.data.get('error_type', 'unknown')]
+            )
 
 

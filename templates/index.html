@@ -189,6 +189,11 @@
                             <i class="fas fa-tachometer-alt"></i> Performance
                         </button>
                     </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="context-tab" data-bs-toggle="tab" data-bs-target="#context" type="button">
+                            <i class="fas fa-brain"></i> Context
+                        </button>
+                    </li>
                 </ul>
 
                 <!-- Tab Content -->
@@ -278,6 +283,86 @@
                         </div>
                     </div>
 
+                    <!-- Context Tab -->
+                    <div class="tab-pane fade" id="context" role="tabpanel">
+                        <div class="card mt-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="fas fa-brain"></i> Context Management</h6>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-primary" onclick="showAddContextModal()">
+                                        <i class="fas fa-plus"></i> Add Context
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-info" onclick="exportContexts()">
+                                        <i class="fas fa-download"></i> Export
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-warning" onclick="showImportContextModal()">
+                                        <i class="fas fa-upload"></i> Import
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" onclick="showClearContextModal()">
+                                        <i class="fas fa-trash"></i> Clear
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <!-- Context Filters -->
+                                <div class="row mb-3">
+                                    <div class="col-md-3">
+                                        <input type="text" id="context-search" class="form-control" placeholder="Search contexts...">
+                                    </div>
+                                    <div class="col-md-2">
+                                        <select id="context-type-filter" class="form-select">
+                                            <option value="">All Types</option>
+                                            <option value="memory">Memory</option>
+                                            <option value="conversation">Conversation</option>
+                                            <option value="knowledge">Knowledge</option>
+                                            <option value="task">Task</option>
+                                            <option value="environment">Environment</option>
+                                            <option value="user_preference">User Preference</option>
+                                            <option value="system_state">System State</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <select id="context-priority-filter" class="form-select">
+                                            <option value="">All Priorities</option>
+                                            <option value="critical">Critical</option>
+                                            <option value="high">High</option>
+                                            <option value="medium">Medium</option>
+                                            <option value="low">Low</option>
+                                            <option value="archive">Archive</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <select id="context-agent-filter" class="form-select">
+                                            <option value="">All Agents</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-2">
+                                        <input type="text" id="context-tag-filter" class="form-control" placeholder="Tags (comma-separated)">
+                                    </div>
+                                    <div class="col-md-1">
+                                        <button class="btn btn-outline-primary" onclick="filterContexts()">
+                                            <i class="fas fa-search"></i>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <!-- Context Summary -->
+                                <div class="row mb-3">
+                                    <div class="col-md-12">
+                                        <div id="context-summary" class="alert alert-info">
+                                            <!-- Context summary will be populated here -->
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <!-- Context List -->
+                                <div id="contexts-container">
+                                    <!-- Context items will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -347,6 +432,162 @@
                     <div id="event-detail-content">
                         <!-- Event details will be populated here -->
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Context Modal -->
+    <div class="modal fade" id="addContextModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Add Context Item</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="context-form">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="context-type" class="form-label">Context Type</label>
+                                    <select class="form-select" id="context-type" required>
+                                        <option value="memory">Memory</option>
+                                        <option value="conversation">Conversation</option>
+                                        <option value="knowledge">Knowledge</option>
+                                        <option value="task">Task</option>
+                                        <option value="environment">Environment</option>
+                                        <option value="user_preference">User Preference</option>
+                                        <option value="system_state">System State</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="context-priority" class="form-label">Priority</label>
+                                    <select class="form-select" id="context-priority">
+                                        <option value="medium">Medium</option>
+                                        <option value="critical">Critical</option>
+                                        <option value="high">High</option>
+                                        <option value="low">Low</option>
+                                        <option value="archive">Archive</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="context-key" class="form-label">Key</label>
+                            <input type="text" class="form-control" id="context-key" placeholder="e.g., user_preference_theme" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="context-value" class="form-label">Value</label>
+                            <textarea class="form-control" id="context-value" rows="4" placeholder="Enter context value..." required></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="context-tags" class="form-label">Tags (comma-separated)</label>
+                                    <input type="text" class="form-control" id="context-tags" placeholder="e.g., auto-captured, important">
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="context-agent" class="form-label">Agent ID (optional)</label>
+                                    <select class="form-select" id="context-agent">
+                                        <option value="">Select Agent</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="context-metadata" class="form-label">Metadata (JSON)</label>
+                            <textarea class="form-control" id="context-metadata" rows="3" placeholder='{"source": "manual", "confidence": 0.9}'></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="addContext()">Add Context</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Import Context Modal -->
+    <div class="modal fade" id="importContextModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Import Contexts</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="import-context-form" enctype="multipart/form-data">
+                        <div class="mb-3">
+                            <label for="context-file" class="form-label">Context File</label>
+                            <input type="file" class="form-control" id="context-file" accept=".json,.csv" required>
+                        </div>
+                        <div class="mb-3">
+                            <label for="import-format" class="form-label">Format</label>
+                            <select class="form-select" id="import-format">
+                                <option value="json">JSON</option>
+                                <option value="csv">CSV</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            <strong>Warning:</strong> Importing contexts will add to existing contexts. Duplicate keys may be overwritten.
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="importContexts()">Import Contexts</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Clear Context Modal -->
+    <div class="modal fade" id="clearContextModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Clear Contexts</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <strong>Warning:</strong> This action cannot be undone. All contexts will be permanently deleted.
+                    </div>
+                    <div class="mb-3">
+                        <label for="clear-type-filter" class="form-label">Filter by Type (optional)</label>
+                        <select class="form-select" id="clear-type-filter">
+                            <option value="">All Types</option>
+                            <option value="memory">Memory</option>
+                            <option value="conversation">Conversation</option>
+                            <option value="knowledge">Knowledge</option>
+                            <option value="task">Task</option>
+                            <option value="environment">Environment</option>
+                            <option value="user_preference">User Preference</option>
+                            <option value="system_state">System State</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="clear-agent-filter" class="form-label">Filter by Agent (optional)</label>
+                        <select class="form-select" id="clear-agent-filter">
+                            <option value="">All Agents</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="clear-tag-filter" class="form-label">Filter by Tags (comma-separated, optional)</label>
+                        <input type="text" class="form-control" id="clear-tag-filter" placeholder="e.g., auto-captured, old">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-danger" onclick="clearContexts()">Clear Contexts</button>
                 </div>
             </div>
         </div>
