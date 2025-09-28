@@ -264,20 +264,180 @@
 
                     <!-- Performance Tab -->
                     <div class="tab-pane fade" id="performance" role="tabpanel">
+                        <!-- Performance Controls -->
                         <div class="card mt-3">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h6 class="mb-0"><i class="fas fa-tachometer-alt"></i> Performance Monitoring</h6>
+                                <div class="btn-group" role="group">
+                                    <button class="btn btn-sm btn-outline-primary" onclick="app.refreshPerformanceData()">
+                                        <i class="fas fa-sync"></i> Refresh
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-info" onclick="app.toggleAutoRefresh()">
+                                        <i class="fas fa-play" id="auto-refresh-icon"></i> Auto Refresh
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-warning" onclick="app.exportPerformanceData()">
+                                        <i class="fas fa-download"></i> Export
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row mb-3">
+                                    <div class="col-md-3">
+                                        <label for="time-range-select" class="form-label">Time Range</label>
+                                        <select class="form-select" id="time-range-select" onchange="app.updateTimeRange()">
+                                            <option value="15">Last 15 minutes</option>
+                                            <option value="30">Last 30 minutes</option>
+                                            <option value="60" selected>Last 1 hour</option>
+                                            <option value="240">Last 4 hours</option>
+                                            <option value="1440">Last 24 hours</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="metric-type-select" class="form-label">Metric Type</label>
+                                        <select class="form-select" id="metric-type-select" onchange="app.updateMetricType()">
+                                            <option value="core">Core Performance</option>
+                                            <option value="system">System Metrics</option>
+                                            <option value="memory">Memory Usage</option>
+                                            <option value="agents">Agent Performance</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label for="refresh-interval" class="form-label">Refresh Interval</label>
+                                        <select class="form-select" id="refresh-interval" onchange="app.updateRefreshInterval()">
+                                            <option value="5000">5 seconds</option>
+                                            <option value="10000" selected>10 seconds</option>
+                                            <option value="30000">30 seconds</option>
+                                            <option value="60000">1 minute</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="form-check mt-4">
+                                            <input class="form-check-input" type="checkbox" id="show-alerts" checked>
+                                            <label class="form-check-label" for="show-alerts">
+                                                Show Performance Alerts
+                                            </label>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Performance Alerts -->
+                        <div class="card mt-3" id="performance-alerts-card" style="display: none;">
                             <div class="card-header">
-                                <h6 class="mb-0"><i class="fas fa-tachometer-alt"></i> Performance Metrics</h6>
+                                <h6 class="mb-0"><i class="fas fa-exclamation-triangle text-warning"></i> Performance Alerts</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="performance-alerts-container">
+                                    <!-- Alerts will be populated here -->
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Core Performance Charts -->
+                        <div class="card mt-3" id="core-performance-card">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-line"></i> Core Performance Metrics</h6>
                             </div>
                             <div class="card-body">
                                 <div class="row">
                                     <div class="col-md-6">
-                                        <canvas id="performance-chart" class="performance-chart"></canvas>
+                                        <canvas id="tool-execution-chart" class="performance-chart"></canvas>
                                     </div>
                                     <div class="col-md-6">
-                                        <div id="performance-stats">
-                                            <!-- Performance stats will be populated here -->
+                                        <canvas id="llm-response-chart" class="performance-chart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <canvas id="memory-access-chart" class="performance-chart"></canvas>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <canvas id="reasoning-time-chart" class="performance-chart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- System Metrics Charts -->
+                        <div class="card mt-3" id="system-metrics-card" style="display: none;">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-server"></i> System Metrics</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <canvas id="cpu-usage-chart" class="performance-chart"></canvas>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <canvas id="memory-usage-chart" class="performance-chart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-6">
+                                        <canvas id="disk-io-chart" class="performance-chart"></canvas>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <canvas id="network-io-chart" class="performance-chart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Memory Usage Charts -->
+                        <div class="card mt-3" id="memory-metrics-card" style="display: none;">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-memory"></i> Memory Usage</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <canvas id="context-size-chart" class="performance-chart"></canvas>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <canvas id="agent-memory-chart" class="performance-chart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-12">
+                                        <canvas id="total-memory-chart" class="performance-chart"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Agent Performance Charts -->
+                        <div class="card mt-3" id="agent-performance-card" style="display: none;">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-robot"></i> Agent Performance</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <canvas id="agent-efficiency-chart" class="performance-chart"></canvas>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <canvas id="agent-error-rate-chart" class="performance-chart"></canvas>
+                                    </div>
+                                </div>
+                                <div class="row mt-3">
+                                    <div class="col-md-12">
+                                        <div id="agent-performance-stats">
+                                            <!-- Agent performance stats will be populated here -->
                                         </div>
                                     </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Performance Summary -->
+                        <div class="card mt-3">
+                            <div class="card-header">
+                                <h6 class="mb-0"><i class="fas fa-chart-bar"></i> Performance Summary</h6>
+                            </div>
+                            <div class="card-body">
+                                <div id="performance-summary">
+                                    <!-- Performance summary will be populated here -->
                                 </div>
                             </div>
                         </div>

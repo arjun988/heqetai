@@ -102,10 +102,10 @@ class DemoAgent:
         return final_response
 
 def simulate_agent_activity(agent, agent_id: str, debugger: WebPortalDebugger):
-    """Simulate continuous agent activity for demonstration"""
+    """Simulate continuous agent activity for demonstration with performance monitoring"""
     tasks = [
         "Analyze market trends for Q4",
-        "Research competitor strategies",
+        "Research competitor strategies", 
         "Generate monthly report",
         "Process customer feedback",
         "Optimize workflow efficiency",
@@ -114,24 +114,66 @@ def simulate_agent_activity(agent, agent_id: str, debugger: WebPortalDebugger):
         "Plan team meeting agenda"
     ]
     
+    # Wait for debugger to be ready
+    max_wait = 10  # seconds
+    wait_time = 0
+    while (not debugger or not hasattr(debugger, 'performance_monitor') or not debugger.performance_monitor) and wait_time < max_wait:
+        time.sleep(1)
+        wait_time += 1
+        print(f"⏳ Waiting for debugger to be ready... ({wait_time}s)")
+    
+    if wait_time >= max_wait:
+        print(f"⚠️ Debugger not ready after {max_wait}s, continuing without performance monitoring")
+    
     task_count = 0
-    while task_count < 10:  # Run 10 tasks for demo
+    while task_count < 20:  # Run 20 tasks for demo
         try:
             task = random.choice(tasks)
             print(f"\n🔄 Starting task {task_count + 1}: {task}")
             
+            # Record performance metrics
+            start_time = time.time()
+            
             # Execute the task
             result = agent.execute_task(task)
             
-            print(f"📊 Task {task_count + 1} completed: {result[:100]}...")
+            # Record completion metrics
+            completion_time = time.time() - start_time
+            
+            # Update performance monitor with metrics
+            if debugger and hasattr(debugger, 'performance_monitor') and debugger.performance_monitor:
+                debugger.performance_monitor.record_metric('total_response_times', completion_time)
+                debugger.performance_monitor.record_agent_metric(agent_id, 'task_completion_times', completion_time)
+                debugger.performance_monitor.record_agent_metric(agent_id, 'tool_usage_count', len(agent.tools))
+                debugger.performance_monitor.record_agent_metric(agent_id, 'memory_usage', len(agent.memory))
+                
+                # Simulate some performance variations
+                if random.random() < 0.1:  # 10% chance of slow performance
+                    debugger.performance_monitor.record_metric('tool_execution_times', random.uniform(3, 8))
+                else:
+                    debugger.performance_monitor.record_metric('tool_execution_times', random.uniform(0.5, 2.0))
+                
+                if random.random() < 0.05:  # 5% chance of error
+                    debugger.performance_monitor.record_metric('error_rates', 0.1)
+                    debugger.performance_monitor.record_agent_metric(agent_id, 'error_count', 1)
+                else:
+                    debugger.performance_monitor.record_metric('error_rates', 0.0)
+                    debugger.performance_monitor.record_agent_metric(agent_id, 'error_count', 0)
+            
+            print(f"📊 Task {task_count + 1} completed in {completion_time:.2f}s: {result[:100]}...")
             task_count += 1
             
             # Wait between tasks
-            time.sleep(random.uniform(2, 5))
+            time.sleep(random.uniform(1, 3))
             
         except Exception as e:
             print(f"❌ Task {task_count + 1} failed: {e}")
             task_count += 1
+            
+            # Record error metrics
+            if debugger and hasattr(debugger, 'performance_monitor') and debugger.performance_monitor:
+                debugger.performance_monitor.record_metric('error_rates', 0.2)
+                debugger.performance_monitor.record_agent_metric(agent_id, 'error_count', 1)
 
 def create_multi_agent_demo():
     """Create multiple agents for demonstration"""
@@ -296,6 +338,44 @@ def add_dynamic_contexts(debugger: WebPortalDebugger):
             print(f"❌ Error adding dynamic context: {e}")
             time.sleep(5)
 
+def simulate_performance_monitoring(debugger: WebPortalDebugger):
+    """Simulate continuous performance monitoring"""
+    # Wait for debugger to be ready
+    max_wait = 10  # seconds
+    wait_time = 0
+    while (not debugger or not hasattr(debugger, 'performance_monitor') or not debugger.performance_monitor) and wait_time < max_wait:
+        time.sleep(1)
+        wait_time += 1
+        print(f"⏳ Performance monitor waiting for debugger... ({wait_time}s)")
+    
+    if wait_time >= max_wait:
+        print(f"⚠️ Performance monitor: Debugger not ready after {max_wait}s, continuing without performance monitoring")
+    
+    while True:
+        try:
+            time.sleep(5)  # Update every 5 seconds
+            
+            if debugger and hasattr(debugger, 'performance_monitor') and debugger.performance_monitor:
+                # Update system metrics
+                debugger.performance_monitor.update_system_metrics()
+                
+                # Simulate some performance variations
+                debugger.performance_monitor.record_metric('llm_response_times', random.uniform(1.0, 4.0))
+                debugger.performance_monitor.record_metric('memory_access_times', random.uniform(0.1, 0.5))
+                debugger.performance_monitor.record_metric('reasoning_times', random.uniform(0.5, 2.0))
+                debugger.performance_monitor.record_metric('throughput', random.uniform(10, 50))
+                
+                # Update memory metrics
+                debugger.performance_monitor.record_memory_metric('context_size', random.randint(50, 200))
+                debugger.performance_monitor.record_memory_metric('agent_memory_size', random.randint(10, 100))
+                debugger.performance_monitor.record_memory_metric('total_memory_usage', random.uniform(100, 500))
+                
+                print(f"📊 Performance metrics updated")
+                
+        except Exception as e:
+            print(f"❌ Error updating performance metrics: {e}")
+            time.sleep(5)
+
 def run_web_demo():
     """Run the complete web portal demonstration"""
     print("🌐 Starting AgentDebugger Web Portal Demo")
@@ -340,10 +420,16 @@ def run_web_demo():
     
     # Start agent activity in separate threads
     threads = []
+    
+    # Wait a moment for debugger to be fully initialized
+    time.sleep(2)
+    
     for agent_id, agent in debugged_agents.items():
+        # Get the debugger instance from the web portal
+        from agent_debugger.web import debugger_instance as web_debugger
         thread = threading.Thread(
             target=simulate_agent_activity,
-            args=(agent, agent_id, debugger_instance),
+            args=(agent, agent_id, web_debugger),
             daemon=True
         )
         thread.start()
@@ -351,19 +437,37 @@ def run_web_demo():
         print(f"🤖 Started {agent_id} simulation thread")
     
     # Start dynamic context generation thread
-    if debugger_instance:
+    from agent_debugger.web import debugger_instance as web_debugger
+    if web_debugger:
         context_thread = threading.Thread(
             target=add_dynamic_contexts,
-            args=(debugger_instance,),
+            args=(web_debugger,),
             daemon=True
         )
         context_thread.start()
         threads.append(context_thread)
         print("🧠 Started dynamic context generation thread")
+        
+        # Start performance monitoring thread
+        performance_thread = threading.Thread(
+            target=simulate_performance_monitoring,
+            args=(web_debugger,),
+            daemon=True
+        )
+        performance_thread.start()
+        threads.append(performance_thread)
+        print("📊 Started performance monitoring thread")
     
     print(f"\n🎉 Demo is running with {len(debugged_agents)} agents!")
     print("💡 Open http://localhost:5000 in your browser to see the web portal")
     print("🧠 Navigate to the 'Context' tab to see context management features")
+    print("📊 Navigate to the 'Performance' tab to see enhanced performance monitoring with:")
+    print("   - Real-time charts for core performance metrics")
+    print("   - System metrics (CPU, memory, disk, network)")
+    print("   - Memory usage tracking")
+    print("   - Agent performance analysis")
+    print("   - Performance alerts and thresholds")
+    print("   - Dynamic chart updates via WebSocket")
     print("⏹️  Press Ctrl+C to stop the demo")
     
     return threads

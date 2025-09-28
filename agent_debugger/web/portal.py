@@ -7,6 +7,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
+import psutil
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
@@ -39,6 +40,10 @@ class WebPortalDebugger(AgentDebugger):
             'event': self._serialize_event(event),
             'timestamp': event.timestamp.isoformat()
         }, namespace='/')
+        
+        # Emit performance update if performance monitoring is enabled
+        if self.performance_monitor:
+            self._emit_performance_update()
 
     def _serialize_event(self, event: TraceEvent) -> Dict[str, Any]:
         return {
@@ -148,13 +153,80 @@ class WebPortalDebugger(AgentDebugger):
     def _get_performance_summary(self) -> Dict[str, Any]:
         if not self.performance_monitor:
             return {}
-        stats = self.performance_monitor.get_statistics()
-        return {
-            'tool_execution_times': stats.get('tool_execution_times', {}),
-            'llm_response_times': stats.get('llm_response_times', {}),
-            'memory_access_times': stats.get('memory_access_times', {}),
-            'reasoning_times': stats.get('reasoning_times', {})
+        
+        # Update system metrics before getting stats
+        self.performance_monitor.update_system_metrics()
+        
+        # Get comprehensive statistics
+        comprehensive_stats = self.performance_monitor.get_comprehensive_statistics()
+        
+        # Fix total_events synchronization - use actual trace events count
+        session_info = comprehensive_stats.get('session_info', {})
+        session_info['total_events'] = len(self.trace_events)
+        
+        # Get chart data
+        chart_data = self._get_chart_data()
+        
+        result = {
+            'core_metrics': comprehensive_stats.get('core_metrics', {}),
+            'agent_metrics': comprehensive_stats.get('agent_metrics', {}),
+            'system_metrics': comprehensive_stats.get('system_metrics', {}),
+            'memory_metrics': comprehensive_stats.get('memory_metrics', {}),
+            'session_info': session_info,
+            'alerts': comprehensive_stats.get('alerts', []),
+            'performance_trends': comprehensive_stats.get('performance_trends', {}),
+            'chart_data': chart_data
         }
+        
+        return result
+    
+    def _get_chart_data(self) -> Dict[str, Any]:
+        """Get chart data for all metric types"""
+        if not self.performance_monitor:
+            return {}
+        
+        chart_data = {}
+        
+        # Core performance charts
+        for metric in ['tool_execution_times', 'llm_response_times', 'memory_access_times', 'reasoning_times']:
+            data = self.performance_monitor.get_chart_data(metric)
+            chart_data[metric] = data
+        
+        # System metrics charts
+        for metric in ['cpu_usage', 'memory_usage', 'disk_io', 'network_io']:
+            data = self.performance_monitor.get_chart_data(metric)
+            chart_data[metric] = data
+        
+        # Memory metrics charts
+        for metric in ['context_size', 'agent_memory_size', 'total_memory_usage']:
+            data = self.performance_monitor.get_chart_data(metric)
+            chart_data[metric] = data
+        
+        return chart_data
+    
+    def _emit_performance_update(self):
+        """Emit performance update via WebSocket"""
+        try:
+            # Update system metrics
+            self.performance_monitor.update_system_metrics()
+            
+            # Get current performance data
+            performance_data = self.performance_monitor.get_comprehensive_statistics()
+            
+            # Emit performance update
+            socketio.emit('performance_update', {
+                'metrics': performance_data,
+                'timestamp': datetime.now().isoformat()
+            }, namespace='/')
+            
+            # Check for new alerts
+            if performance_data.get('alerts'):
+                latest_alerts = performance_data['alerts'][-5:]  # Last 5 alerts
+                for alert in latest_alerts:
+                    socketio.emit('performance_alert', alert, namespace='/')
+                    
+        except Exception as e:
+            print(f"Error emitting performance update: {e}")
 
 
 debugger_instance: Optional[AgentDebugger] = None
@@ -336,6 +408,89 @@ def export_trace():
     filename = f"trace_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     debugger.export_trace(filename)
     return jsonify({'success': True, 'filename': filename})
+
+
+@app.route('/api/performance')
+def get_performance_data():
+    """Get comprehensive performance data"""
+    debugger = init_web_debugger()
+    if not debugger.performance_monitor:
+        return jsonify({'error': 'Performance monitoring not enabled'}), 400
+    
+    # Use the performance summary method which includes chart data
+    performance_data = debugger._get_performance_summary()
+    
+    return jsonify(performance_data)
+
+
+@app.route('/api/performance/charts/<metric_type>')
+def get_performance_chart(metric_type):
+    """Get chart data for specific metric type"""
+    debugger = init_web_debugger()
+    if not debugger.performance_monitor:
+        return jsonify({'error': 'Performance monitoring not enabled'}), 400
+    
+    time_range = int(request.args.get('time_range', 60))  # minutes
+    chart_data = debugger.performance_monitor.get_chart_data(metric_type, time_range)
+    
+    return jsonify(chart_data)
+
+
+@app.route('/api/performance/alerts')
+def get_performance_alerts():
+    """Get performance alerts"""
+    debugger = init_web_debugger()
+    if not debugger.performance_monitor:
+        return jsonify({'error': 'Performance monitoring not enabled'}), 400
+    
+    alerts = debugger.performance_monitor.alerts
+    return jsonify({
+        'alerts': alerts[-50:],  # Last 50 alerts
+        'total_alerts': len(alerts)
+    })
+
+
+@app.route('/api/performance/agents/<agent_id>')
+def get_agent_performance(agent_id):
+    """Get performance data for specific agent"""
+    debugger = init_web_debugger()
+    if not debugger.performance_monitor:
+        return jsonify({'error': 'Performance monitoring not enabled'}), 400
+    
+    if agent_id not in debugger.performance_monitor.agent_metrics:
+        return jsonify({'error': 'Agent not found'}), 404
+    
+    agent_data = debugger.performance_monitor.agent_metrics[agent_id]
+    efficiency_score = debugger.performance_monitor.calculate_efficiency_score(agent_id)
+    
+    return jsonify({
+        'agent_id': agent_id,
+        'metrics': debugger.performance_monitor._get_metric_stats(agent_data),
+        'efficiency_score': efficiency_score,
+        'total_tasks': len(agent_data['task_completion_times']),
+        'total_errors': sum(agent_data['error_count']),
+        'avg_memory_usage': sum(agent_data['memory_usage']) / max(1, len(agent_data['memory_usage']))
+    })
+
+
+@app.route('/api/performance/system')
+def get_system_performance():
+    """Get system performance metrics"""
+    debugger = init_web_debugger()
+    if not debugger.performance_monitor:
+        return jsonify({'error': 'Performance monitoring not enabled'}), 400
+    
+    # Update system metrics
+    debugger.performance_monitor.update_system_metrics()
+    
+    system_stats = debugger.performance_monitor._get_metric_stats(debugger.performance_monitor.system_metrics)
+    
+    return jsonify({
+        'system_metrics': system_stats,
+        'current_cpu': psutil.cpu_percent() if 'psutil' in globals() else 0,
+        'current_memory': psutil.virtual_memory().percent if 'psutil' in globals() else 0,
+        'timestamp': datetime.now().isoformat()
+    })
 
 
 @app.route('/api/replay', methods=['POST'])
@@ -568,7 +723,7 @@ def clear_contexts():
 
 
 @socketio.on('connect')
-def handle_connect():
+def handle_connect(auth=None):
     join_room('debugger_clients')
     debugger = init_web_debugger()
     emit('debugger_state', debugger.get_web_summary())

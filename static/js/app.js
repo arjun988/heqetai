@@ -12,7 +12,12 @@ class AgentDebuggerApp {
         this.events = [];
         this.breakpoints = [];
         this.contexts = [];
-        this.performanceChart = null;
+        this.performanceCharts = {};
+        this.performanceData = {};
+        this.autoRefreshInterval = null;
+        this.refreshInterval = 10000; // 10 seconds
+        this.currentTimeRange = 60; // 1 hour
+        this.currentMetricType = 'core';
         
         this.init();
     }
@@ -103,6 +108,15 @@ class AgentDebuggerApp {
             this.refreshContexts();
         });
         
+        // Performance monitoring events
+        this.socket.on('performance_update', (data) => {
+            this.handlePerformanceUpdate(data);
+        });
+        
+        this.socket.on('performance_alert', (data) => {
+            this.handlePerformanceAlert(data);
+        });
+        
         this.socket.on('error', (data) => {
             this.showError(data.message);
         });
@@ -141,6 +155,9 @@ class AgentDebuggerApp {
             // Load contexts
             await this.refreshContexts();
             
+            // Load performance data
+            await this.refreshPerformanceData();
+            
         } catch (error) {
             console.error('Failed to load initial data:', error);
             this.showError('Failed to load initial data');
@@ -177,7 +194,7 @@ class AgentDebuggerApp {
         
         // Update performance chart if data available
         if (data.performance_summary) {
-            this.updatePerformanceChart(data.performance_summary);
+            this.updatePerformanceSummary(data.performance_summary);
         }
         
         // Show recent errors in console
@@ -502,56 +519,494 @@ class AgentDebuggerApp {
     
     
     setupPerformanceChart() {
-        try {
-            const canvas = document.getElementById('performance-chart');
-            if (!canvas) {
-                console.error('Performance chart canvas not found');
-                return;
-            }
-            
-            const ctx = canvas.getContext('2d');
-            this.performanceChart = new Chart(ctx, {
+        // Initialize all performance charts
+        this.initializePerformanceCharts();
+        this.startAutoRefresh();
+        
+        // Load initial performance data
+        this.refreshPerformanceData();
+    }
+    
+    initializePerformanceCharts() {
+        const chartConfigs = {
+            'tool-execution-chart': {
                 type: 'line',
-                data: {
-                    labels: [],
-                    datasets: [{
-                        label: 'Tool Execution Time',
-                        data: [],
-                        borderColor: '#28a745',
-                        backgroundColor: 'rgba(40, 167, 69, 0.1)',
-                        tension: 0.1
-                    }, {
-                        label: 'LLM Response Time',
-                        data: [],
-                        borderColor: '#ffc107',
-                        backgroundColor: 'rgba(255, 193, 7, 0.1)',
-                        tension: 0.1
-                    }]
+                title: 'Tool Execution Times',
+                yAxisLabel: 'Time (seconds)',
+                color: '#28a745'
+            },
+            'llm-response-chart': {
+                type: 'line',
+                title: 'LLM Response Times',
+                yAxisLabel: 'Time (seconds)',
+                color: '#ffc107'
+            },
+            'memory-access-chart': {
+                type: 'line',
+                title: 'Memory Access Times',
+                yAxisLabel: 'Time (seconds)',
+                color: '#17a2b8'
+            },
+            'reasoning-time-chart': {
+                type: 'line',
+                title: 'Reasoning Times',
+                yAxisLabel: 'Time (seconds)',
+                color: '#6f42c1'
+            },
+            'cpu-usage-chart': {
+                type: 'line',
+                title: 'CPU Usage',
+                yAxisLabel: 'Percentage (%)',
+                color: '#dc3545'
+            },
+            'memory-usage-chart': {
+                type: 'line',
+                title: 'Memory Usage',
+                yAxisLabel: 'Percentage (%)',
+                color: '#fd7e14'
+            },
+            'disk-io-chart': {
+                type: 'line',
+                title: 'Disk I/O',
+                yAxisLabel: 'Bytes',
+                color: '#20c997'
+            },
+            'network-io-chart': {
+                type: 'line',
+                title: 'Network I/O',
+                yAxisLabel: 'Bytes',
+                color: '#6f42c1'
+            },
+            'context-size-chart': {
+                type: 'line',
+                title: 'Context Size',
+                yAxisLabel: 'Items',
+                color: '#17a2b8'
+            },
+            'agent-memory-chart': {
+                type: 'line',
+                title: 'Agent Memory Usage',
+                yAxisLabel: 'Items',
+                color: '#28a745'
+            },
+            'total-memory-chart': {
+                type: 'line',
+                title: 'Total Memory Usage',
+                yAxisLabel: 'MB',
+                color: '#dc3545'
+            },
+            'agent-efficiency-chart': {
+                type: 'bar',
+                title: 'Agent Efficiency Scores',
+                yAxisLabel: 'Score (0-100)',
+                color: '#28a745'
+            },
+            'agent-error-rate-chart': {
+                type: 'bar',
+                title: 'Agent Error Rates',
+                yAxisLabel: 'Error Rate',
+                color: '#dc3545'
+            }
+        };
+        
+        Object.entries(chartConfigs).forEach(([chartId, config]) => {
+            const canvas = document.getElementById(chartId);
+            if (canvas) {
+                this.performanceCharts[chartId] = this.createChart(canvas, config);
+            }
+        });
+    }
+    
+    createChart(canvas, config) {
+        const ctx = canvas.getContext('2d');
+        return new Chart(ctx, {
+            type: config.type,
+            data: {
+                labels: [],
+                datasets: [{
+                    label: config.title,
+                    data: [],
+                    borderColor: config.color,
+                    backgroundColor: config.color + '20',
+                    tension: 0.1,
+                    fill: false
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    title: {
+                        display: true,
+                        text: config.title
+                    }
                 },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: {
-                            beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Time (seconds)'
-                            }
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: config.yAxisLabel
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
                         }
                     }
+                },
+                animation: {
+                    duration: 750
                 }
-            });
-            console.log('Performance chart initialized successfully');
+            }
+        });
+    }
+    
+    async refreshPerformanceData() {
+        try {
+            const response = await fetch('/api/performance');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            const data = await response.json();
+            this.performanceData = data;
+            this.updateAllCharts();
+            this.updatePerformanceSummary();
+            this.updatePerformanceAlerts();
         } catch (error) {
-            console.error('Error setting up performance chart:', error);
+            console.error('Failed to refresh performance data:', error);
+            // Set empty performance data to show appropriate message
+            this.performanceData = null;
+            this.updatePerformanceSummary();
         }
     }
     
-    updatePerformanceChart(performanceData) {
-        // This would update the chart with new performance data
-        // Implementation depends on the structure of performanceData
-        console.log('Performance data:', performanceData);
+    updateAllCharts() {
+        if (!this.performanceData || !this.performanceData.chart_data) {
+            // Clear all charts if no data available
+            this.clearAllCharts();
+            return;
+        }
+        
+        // Update core performance charts
+        this.updateChart('tool-execution-chart', 'tool_execution_times');
+        this.updateChart('llm-response-chart', 'llm_response_times');
+        this.updateChart('memory-access-chart', 'memory_access_times');
+        this.updateChart('reasoning-time-chart', 'reasoning_times');
+        
+        // Update system metrics charts
+        this.updateChart('cpu-usage-chart', 'cpu_usage');
+        this.updateChart('memory-usage-chart', 'memory_usage');
+        this.updateChart('disk-io-chart', 'disk_io');
+        this.updateChart('network-io-chart', 'network_io');
+        
+        // Update memory metrics charts
+        this.updateChart('context-size-chart', 'context_size');
+        this.updateChart('agent-memory-chart', 'agent_memory_size');
+        this.updateChart('total-memory-chart', 'total_memory_usage');
+        
+        // Update agent performance charts
+        this.updateAgentPerformanceCharts();
+    }
+    
+    clearAllCharts() {
+        // Clear all charts by setting empty data
+        const chartIds = [
+            'tool-execution-chart', 'llm-response-chart', 'memory-access-chart', 'reasoning-time-chart',
+            'cpu-usage-chart', 'memory-usage-chart', 'disk-io-chart', 'network-io-chart',
+            'context-size-chart', 'agent-memory-chart', 'total-memory-chart',
+            'agent-efficiency-chart', 'agent-error-rate-chart'
+        ];
+        
+        chartIds.forEach(chartId => {
+            const chart = this.performanceCharts[chartId];
+            if (chart) {
+                chart.data.labels = [];
+                chart.data.datasets[0].data = [];
+                chart.update('none');
+            }
+        });
+    }
+    
+    updateChart(chartId, metricType) {
+        const chart = this.performanceCharts[chartId];
+        if (!chart) {
+            return;
+        }
+        
+        const chartData = this.performanceData.chart_data?.[metricType];
+        
+        if (!chartData || !chartData.labels || chartData.labels.length === 0) {
+            // Initialize with empty data if no data available
+            chart.data.labels = [];
+            chart.data.datasets[0].data = [];
+            chart.update('none');
+            return;
+        }
+        
+        chart.data.labels = chartData.labels;
+        chart.data.datasets[0].data = chartData.datasets[0].data;
+        chart.update('none'); // No animation for real-time updates
+    }
+    
+    updateAgentPerformanceCharts() {
+        // Update agent efficiency chart
+        const efficiencyChart = this.performanceCharts['agent-efficiency-chart'];
+        if (efficiencyChart && this.performanceData.agent_metrics) {
+            const agents = Object.keys(this.performanceData.agent_metrics);
+            const efficiencyScores = agents.map(agent => 
+                this.performanceData.agent_metrics[agent].efficiency_score || 0
+            );
+            
+            efficiencyChart.data.labels = agents;
+            efficiencyChart.data.datasets[0].data = efficiencyScores;
+            efficiencyChart.update('none');
+        }
+        
+        // Update agent error rate chart
+        const errorRateChart = this.performanceCharts['agent-error-rate-chart'];
+        if (errorRateChart && this.performanceData.agent_metrics) {
+            const agents = Object.keys(this.performanceData.agent_metrics);
+            const errorRates = agents.map(agent => {
+                const agentData = this.performanceData.agent_metrics[agent];
+                return agentData.total_errors / Math.max(1, agentData.total_tasks);
+            });
+            
+            errorRateChart.data.labels = agents;
+            errorRateChart.data.datasets[0].data = errorRates;
+            errorRateChart.update('none');
+        }
+    }
+    
+    updatePerformanceSummary() {
+        const container = document.getElementById('performance-summary');
+        if (!container) return;
+        
+        // Handle case when performance data is not available
+        if (!this.performanceData) {
+            container.innerHTML = `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle"></i>
+                    Performance data is not available. Make sure performance monitoring is enabled.
+                </div>
+            `;
+            return;
+        }
+        
+        const sessionInfo = this.performanceData.session_info || {};
+        const coreMetrics = this.performanceData.core_metrics || {};
+        const systemMetrics = this.performanceData.system_metrics || {};
+        
+        container.innerHTML = `
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="card bg-primary text-white">
+                        <div class="card-body text-center">
+                            <h5>${sessionInfo.total_events || 0}</h5>
+                            <small>Total Events</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-success text-white">
+                        <div class="card-body text-center">
+                            <h5>${sessionInfo.active_agents || 0}</h5>
+                            <small>Active Agents</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-info text-white">
+                        <div class="card-body text-center">
+                            <h5>${Math.round((sessionInfo.session_duration || 0) / 60)}m</h5>
+                            <small>Session Duration</small>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card bg-warning text-white">
+                        <div class="card-body text-center">
+                            <h5>${this.performanceData.alerts?.length || 0}</h5>
+                            <small>Active Alerts</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="row mt-3">
+                <div class="col-md-6">
+                    <h6>Core Performance</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tr>
+                                <td>Tool Execution (avg):</td>
+                                <td>${coreMetrics.tool_execution_times?.mean?.toFixed(2) || '0.00'}s</td>
+                            </tr>
+                            <tr>
+                                <td>LLM Response (avg):</td>
+                                <td>${coreMetrics.llm_response_times?.mean?.toFixed(2) || '0.00'}s</td>
+                            </tr>
+                            <tr>
+                                <td>Memory Access (avg):</td>
+                                <td>${coreMetrics.memory_access_times?.mean?.toFixed(2) || '0.00'}s</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>System Metrics</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm">
+                            <tr>
+                                <td>CPU Usage:</td>
+                                <td>${systemMetrics.cpu_usage?.latest?.toFixed(1) || '0.0'}%</td>
+                            </tr>
+                            <tr>
+                                <td>Memory Usage:</td>
+                                <td>${systemMetrics.memory_usage?.latest?.toFixed(1) || '0.0'}%</td>
+                            </tr>
+                            <tr>
+                                <td>Active Connections:</td>
+                                <td>${systemMetrics.active_connections?.latest || 0}</td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    updatePerformanceAlerts() {
+        const container = document.getElementById('performance-alerts-container');
+        const alertsCard = document.getElementById('performance-alerts-card');
+        
+        if (!container || !this.performanceData.alerts) return;
+        
+        const alerts = this.performanceData.alerts;
+        
+        if (alerts.length === 0) {
+            alertsCard.style.display = 'none';
+            return;
+        }
+        
+        alertsCard.style.display = 'block';
+        container.innerHTML = alerts.map(alert => `
+            <div class="alert alert-${alert.severity === 'critical' ? 'danger' : 'warning'} alert-dismissible fade show">
+                <strong>${alert.metric}:</strong> ${alert.message}
+                <br><small class="text-muted">${new Date(alert.timestamp).toLocaleString()}</small>
+            </div>
+        `).join('');
+    }
+    
+    startAutoRefresh() {
+        if (this.autoRefreshInterval) {
+            clearInterval(this.autoRefreshInterval);
+        }
+        
+        this.autoRefreshInterval = setInterval(() => {
+            if (this.connected) {
+                this.refreshPerformanceData();
+            }
+        }, this.refreshInterval);
+    }
+    
+    stopAutoRefresh() {
+        if (this.autoRefreshInterval) {
+            clearInterval(this.autoRefreshInterval);
+            this.autoRefreshInterval = null;
+        }
+    }
+    
+    toggleAutoRefresh() {
+        const icon = document.getElementById('auto-refresh-icon');
+        if (this.autoRefreshInterval) {
+            this.stopAutoRefresh();
+            icon.className = 'fas fa-play';
+        } else {
+            this.startAutoRefresh();
+            icon.className = 'fas fa-pause';
+        }
+    }
+    
+    updateTimeRange() {
+        this.currentTimeRange = parseInt(document.getElementById('time-range-select').value);
+        this.refreshPerformanceData();
+    }
+    
+    updateMetricType() {
+        this.currentMetricType = document.getElementById('metric-type-select').value;
+        this.showMetricType(this.currentMetricType);
+    }
+    
+    showMetricType(metricType) {
+        // Hide all metric cards
+        document.getElementById('core-performance-card').style.display = 'none';
+        document.getElementById('system-metrics-card').style.display = 'none';
+        document.getElementById('memory-metrics-card').style.display = 'none';
+        document.getElementById('agent-performance-card').style.display = 'none';
+        
+        // Show selected metric card
+        switch (metricType) {
+            case 'core':
+                document.getElementById('core-performance-card').style.display = 'block';
+                break;
+            case 'system':
+                document.getElementById('system-metrics-card').style.display = 'block';
+                break;
+            case 'memory':
+                document.getElementById('memory-metrics-card').style.display = 'block';
+                break;
+            case 'agents':
+                document.getElementById('agent-performance-card').style.display = 'block';
+                break;
+        }
+    }
+    
+    updateRefreshInterval() {
+        this.refreshInterval = parseInt(document.getElementById('refresh-interval').value);
+        if (this.autoRefreshInterval) {
+            this.startAutoRefresh();
+        }
+    }
+    
+    exportPerformanceData() {
+        if (!this.performanceData) {
+            this.showError('No performance data to export');
+            return;
+        }
+        
+        const dataStr = JSON.stringify(this.performanceData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        const url = URL.createObjectURL(dataBlob);
+        
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `performance_data_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        this.showNotification('Performance data exported successfully', 'success');
+    }
+    
+    handlePerformanceUpdate(data) {
+        // Update performance data with new metrics
+        if (data.metrics) {
+            this.performanceData = { ...this.performanceData, ...data };
+            this.updateAllCharts();
+            this.updatePerformanceSummary();
+        }
+    }
+    
+    handlePerformanceAlert(alert) {
+        // Show performance alert notification
+        const severity = alert.severity === 'critical' ? 'danger' : 'warning';
+        this.showNotification(`Performance Alert: ${alert.message}`, severity);
+        
+        // Update alerts display
+        this.updatePerformanceAlerts();
     }
     
     // Event handlers
