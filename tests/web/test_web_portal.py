@@ -46,7 +46,7 @@ class TestWebPortal:
         assert portal.host == "127.0.0.1"
         assert portal.port == 8080
 
-    @patch('flask.Flask')
+    @patch("flask.Flask")
     def test_setup_routes(self, mock_flask, debugger):
         """Test setting up web routes."""
         portal = WebPortal(debugger)
@@ -132,7 +132,7 @@ class TestWebPortal:
         result = web_portal._execute_command("invalid_command")
         assert "error" in result.lower() or "unknown" in result.lower()
 
-    @patch('builtins.open')
+    @patch("builtins.open")
     def test_export_trace_web(self, mock_open, web_portal, tmp_path):
         """Test exporting trace via web interface."""
         export_path = tmp_path / "web_export.json"
@@ -164,7 +164,7 @@ class TestWebPortal:
         # Should have processed the message
         # In real implementation, this would send responses back
 
-    @patch('flask.Flask.run')
+    @patch("flask.Flask.run")
     def test_start_server(self, mock_run, web_portal):
         """Test starting the web server."""
         web_portal.start()
@@ -175,7 +175,7 @@ class TestWebPortal:
             debug=False
         )
 
-    @patch('flask.Flask.run')
+    @patch("flask.Flask.run")
     def test_start_server_debug(self, mock_run, debugger):
         """Test starting the web server in debug mode."""
         portal = WebPortal(debugger, debug=True)

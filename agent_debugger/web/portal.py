@@ -243,12 +243,13 @@ def init_web_debugger() -> WebPortalDebugger:
     return debugger_instance
 
 
-@app.route('/')
+@app.route("/")
 def index():
-    return render_template('index.html')
+    return render_template("index.html")
 
 
 @app.route("/api/summary")
+@app.route("/api/dashboard")
 def get_summary():
     debugger = init_web_debugger()
     return jsonify(debugger.get_web_summary())
@@ -257,9 +258,11 @@ def get_summary():
 @app.route("/api/agents")
 def get_agents():
     debugger = init_web_debugger()
-    agents: Dict[str, Any] = {}
+    agents: List[Dict[str, Any]] = []
     for agent_id, state in debugger.agent_states.items():
-        agents[agent_id] = debugger._serialize_agent_state(state)
+        serialized = debugger._serialize_agent_state(state)
+        serialized["agent_id"] = agent_id
+        agents.append(serialized)
     return jsonify(agents)
 
 
@@ -767,14 +770,14 @@ def attach_agent_to_web(agent, agent_id: Optional[str] = None, framework: str = 
     return debugger.attach(agent, agent_id)
 
 
-if __name__ == '__main__':
-    os.makedirs('templates', exist_ok=True)
-    os.makedirs('static/css', exist_ok=True)
-    os.makedirs('static/js', exist_ok=True)
+if __name__ == "__main__":
+    os.makedirs("templates", exist_ok=True)
+    os.makedirs("static/css", exist_ok=True)
+    os.makedirs("static/js", exist_ok=True)
     print("🌐 Starting AgentDebugger Web Portal...")
     print("📊 Dashboard: http://localhost:5000")
     print("🔧 API: http://localhost:5000/api/")
     print("📡 WebSocket: ws://localhost:5000/socket.io/")
-    socketio.run(app, debug=True, host='0.0.0.0', port=5000)
+    socketio.run(app, debug=True, host="0.0.0.0", port=5000)
 
 
