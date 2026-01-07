@@ -22,9 +22,7 @@ class AgentState:
         self.tasks_completed: int = 0
         self.errors_encountered: int = 0
         self.performance_stats: Dict[str, float] = {
-            'total_tool_time': 0.0,
-            'total_llm_time': 0.0,
-            'avg_response_time': 0.0
+            "total_tool_time": 0.0,
+            "total_llm_time": 0.0,
+            "avg_response_time": 0.0,
         }
-
-

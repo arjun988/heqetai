@@ -1,0 +1,12 @@
+include README.md
+include LICENSE
+include pyproject.toml
+recursive-include agent_debugger *.py
+recursive-include tests *.py
+recursive-include examples *.py
+global-exclude *.pyc
+global-exclude __pycache__
+prune .git
+prune .github
+prune tests
+prune venv

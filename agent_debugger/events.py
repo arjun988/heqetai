@@ -6,11 +6,12 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Callable, Dict, Optional
 
 
 class EventType(Enum):
     """Types of events that can be traced in agent execution"""
+
     REASONING_START = "reasoning_start"
     REASONING_END = "reasoning_end"
     TOOL_CALL_START = "tool_call_start"
@@ -31,6 +32,7 @@ class EventType(Enum):
 
 class BreakpointType(Enum):
     """Types of breakpoints supported"""
+
     BEFORE_TOOL = "before_tool"
     AFTER_TOOL = "after_tool"
     BEFORE_MEMORY_WRITE = "before_memory_write"
@@ -48,6 +50,7 @@ class BreakpointType(Enum):
 @dataclass
 class TraceEvent:
     """Represents a single event in agent execution trace"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     timestamp: datetime = field(default_factory=datetime.now)
     event_type: EventType = EventType.REASONING_START
@@ -62,6 +65,7 @@ class TraceEvent:
 @dataclass
 class Breakpoint:
     """Represents a breakpoint in agent execution"""
+
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
     breakpoint_type: BreakpointType = BreakpointType.BEFORE_TOOL
     condition: Optional[Callable[["TraceEvent"], bool]] = None
@@ -71,5 +75,3 @@ class Breakpoint:
     hit_count: int = 0
     temporary: bool = False  # One-time breakpoint
     metadata: Dict[str, Any] = field(default_factory=dict)
-
-
