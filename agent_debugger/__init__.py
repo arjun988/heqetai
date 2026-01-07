@@ -10,15 +10,13 @@ from .console import DebugConsole
 from .debugger import AgentDebugger
 
 __all__ = [
-    'AgentDebugger',
-    'EventType',
-    'BreakpointType',
-    'TraceEvent',
-    'Breakpoint',
-    'AgentState',
-    'MockRegistry',
-    'PerformanceMonitor',
-    'DebugConsole',
+    "AgentDebugger",
+    "EventType",
+    "BreakpointType",
+    "TraceEvent",
+    "Breakpoint",
+    "AgentState",
+    "MockRegistry",
+    "PerformanceMonitor",
+    "DebugConsole",
 ]
-
-

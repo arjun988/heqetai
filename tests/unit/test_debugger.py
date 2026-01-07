@@ -1,6 +1,7 @@
 """
 Unit tests for the core AgentDebugger functionality.
 """
+
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
@@ -36,7 +37,7 @@ class TestAgentDebugger:
             enable_replay=False,
             max_trace_events=5000,
             auto_export=True,
-            export_path="/tmp/traces"
+            export_path="/tmp/traces",
         )
         assert debugger.mode == "web"
         assert debugger.enable_replay is False
@@ -99,7 +100,7 @@ class TestAgentDebugger:
         event = TraceEvent(
             event_type=EventType.TOOL_CALL,
             agent_id="test_agent",
-            data={"tool": "web_search", "input": "test"}
+            data={"tool": "web_search", "input": "test"},
         )
 
         debugger.record_event(event)
@@ -121,9 +122,15 @@ class TestAgentDebugger:
     def test_get_trace_summary(self, debugger):
         """Test getting trace summary statistics."""
         # Add some events
-        debugger.record_event(TraceEvent(EventType.TOOL_CALL, "agent1", {"tool": "search"}))
-        debugger.record_event(TraceEvent(EventType.TOOL_CALL, "agent2", {"tool": "read"}))
-        debugger.record_event(TraceEvent(EventType.MEMORY_WRITE, "agent1", {"key": "data"}))
+        debugger.record_event(
+            TraceEvent(EventType.TOOL_CALL, "agent1", {"tool": "search"})
+        )
+        debugger.record_event(
+            TraceEvent(EventType.TOOL_CALL, "agent2", {"tool": "read"})
+        )
+        debugger.record_event(
+            TraceEvent(EventType.MEMORY_WRITE, "agent1", {"key": "data"})
+        )
 
         summary = debugger.get_trace_summary()
 
@@ -134,7 +141,9 @@ class TestAgentDebugger:
 
     def test_export_trace_json(self, debugger, tmp_path):
         """Test exporting trace to JSON."""
-        debugger.record_event(TraceEvent(EventType.TOOL_CALL, "agent1", {"test": "data"}))
+        debugger.record_event(
+            TraceEvent(EventType.TOOL_CALL, "agent1", {"test": "data"})
+        )
 
         export_path = tmp_path / "trace.json"
         debugger.export_trace(str(export_path))
@@ -142,6 +151,7 @@ class TestAgentDebugger:
         assert export_path.exists()
 
         import json
+
         with open(export_path) as f:
             data = json.load(f)
 
@@ -151,7 +161,9 @@ class TestAgentDebugger:
 
     def test_export_trace_csv(self, debugger, tmp_path):
         """Test exporting trace to CSV."""
-        debugger.record_event(TraceEvent(EventType.TOOL_CALL, "agent1", {"test": "data"}))
+        debugger.record_event(
+            TraceEvent(EventType.TOOL_CALL, "agent1", {"test": "data"})
+        )
 
         export_path = tmp_path / "trace.csv"
         debugger.export_trace(str(export_path), format="csv")
@@ -190,32 +202,36 @@ class TestAgentDebugger:
     def test_is_breakpoint_hit(self, debugger):
         """Test breakpoint hit detection."""
         # Add a breakpoint for tool calls
-        breakpoint = Breakpoint(breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search")
+        breakpoint = Breakpoint(
+            breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search"
+        )
         debugger.add_breakpoint(breakpoint)
 
         # Create an event that should trigger the breakpoint
         event = TraceEvent(
             event_type=EventType.BEFORE_TOOL_EXECUTION,
             agent_id="agent1",
-            data={"tool_name": "web_search"}
+            data={"tool_name": "web_search"},
         )
 
         # Mock the condition check
-        with patch.object(breakpoint, 'matches_event', return_value=True):
+        with patch.object(breakpoint, "matches_event", return_value=True):
             assert debugger.is_breakpoint_hit(event) is True
 
     def test_is_breakpoint_hit_no_match(self, debugger):
         """Test breakpoint hit detection when no breakpoint matches."""
-        breakpoint = Breakpoint(breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search")
+        breakpoint = Breakpoint(
+            breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search"
+        )
         debugger.add_breakpoint(breakpoint)
 
         event = TraceEvent(
             event_type=EventType.BEFORE_TOOL_EXECUTION,
             agent_id="agent1",
-            data={"tool_name": "file_read"}  # Different tool
+            data={"tool_name": "file_read"},  # Different tool
         )
 
-        with patch.object(breakpoint, 'matches_event', return_value=False):
+        with patch.object(breakpoint, "matches_event", return_value=False):
             assert debugger.is_breakpoint_hit(event) is False
 
     def test_pause_execution(self, debugger):
@@ -233,7 +249,7 @@ class TestAgentDebugger:
         debugger.resume_execution()
         assert debugger.is_paused is False
 
-    @patch('builtins.input', return_value='c')
+    @patch("builtins.input", return_value="c")
     def test_wait_for_command_console_mode(self, mock_input):
         """Test waiting for user command in console mode."""
         debugger = AgentDebugger(mode="console")
@@ -241,7 +257,7 @@ class TestAgentDebugger:
 
         # Should return the command
         command = debugger.wait_for_command()
-        assert command == 'c'
+        assert command == "c"
 
     def test_get_agent_state(self, debugger, mock_agent):
         """Test getting agent state."""
@@ -302,11 +318,13 @@ class TestAgentDebugger:
         debugger.performance_monitor = performance_monitor
 
         # Mock some performance data
-        performance_monitor.get_stats = Mock(return_value={
-            "total_events": 100,
-            "avg_processing_time": 0.5,
-            "memory_usage": "50MB"
-        })
+        performance_monitor.get_stats = Mock(
+            return_value={
+                "total_events": 100,
+                "avg_processing_time": 0.5,
+                "memory_usage": "50MB",
+            }
+        )
 
         stats = debugger.get_performance_stats()
         assert stats["total_events"] == 100

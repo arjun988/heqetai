@@ -29,7 +29,15 @@ def build_pipeline(task: str, model: str, device: str | None = None):
     return pipeline(task, model=model, **kwargs)
 
 
-def run_demo(prompt: str, task: str = "text-generation", model: str = "gpt2", console: bool = False, max_new_tokens: int = 24, device: str | None = None, seed: int | None = 42):
+def run_demo(
+    prompt: str,
+    task: str = "text-generation",
+    model: str = "gpt2",
+    console: bool = False,
+    max_new_tokens: int = 24,
+    device: str | None = None,
+    seed: int | None = 42,
+):
     if seed is not None:
         try:
             set_seed(seed)
@@ -60,14 +68,36 @@ def run_demo(prompt: str, task: str = "text-generation", model: str = "gpt2", co
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Hugging Face integration demo with interactive console")
-    parser.add_argument("prompt", nargs="?", default="Hello from AgentDebugger!", help="Input prompt/text")
-    parser.add_argument("--task", default="text-generation", help="Pipeline task, e.g., text-generation, summarization, sentiment-analysis")
+    parser = argparse.ArgumentParser(
+        description="Hugging Face integration demo with interactive console"
+    )
+    parser.add_argument(
+        "prompt",
+        nargs="?",
+        default="Hello from AgentDebugger!",
+        help="Input prompt/text",
+    )
+    parser.add_argument(
+        "--task",
+        default="text-generation",
+        help="Pipeline task, e.g., text-generation, summarization, sentiment-analysis",
+    )
     parser.add_argument("--model", default="gpt2", help="Model name or path")
-    parser.add_argument("--console", action="store_true", help="Enable interactive console breakpoints")
-    parser.add_argument("--max-new-tokens", type=int, default=24, help="Max new tokens for generation tasks")
-    parser.add_argument("--device", default=None, help="Device index (e.g., 0 for CUDA:0), optional")
-    parser.add_argument("--seed", type=int, default=42, help="Random seed for reproducibility")
+    parser.add_argument(
+        "--console", action="store_true", help="Enable interactive console breakpoints"
+    )
+    parser.add_argument(
+        "--max-new-tokens",
+        type=int,
+        default=24,
+        help="Max new tokens for generation tasks",
+    )
+    parser.add_argument(
+        "--device", default=None, help="Device index (e.g., 0 for CUDA:0), optional"
+    )
+    parser.add_argument(
+        "--seed", type=int, default=42, help="Random seed for reproducibility"
+    )
 
     args = parser.parse_args()
 
@@ -86,5 +116,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-

@@ -1,6 +1,7 @@
 """
 Unit tests for the event system and trace events.
 """
+
 import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock
@@ -21,7 +22,7 @@ class TestTraceEvent:
         event = TraceEvent(
             event_type=EventType.TOOL_CALL,
             agent_id="test_agent",
-            data={"tool": "web_search", "input": "test query"}
+            data={"tool": "web_search", "input": "test query"},
         )
 
         assert event.event_type == EventType.TOOL_CALL
@@ -34,16 +35,14 @@ class TestTraceEvent:
     def test_trace_event_with_parent(self):
         """Test creating a trace event with a parent."""
         parent_event = TraceEvent(
-            event_type=EventType.AGENT_START,
-            agent_id="test_agent",
-            data={}
+            event_type=EventType.AGENT_START, agent_id="test_agent", data={}
         )
 
         child_event = TraceEvent(
             event_type=EventType.TOOL_CALL,
             agent_id="test_agent",
             data={"tool": "web_search"},
-            parent_event_id=parent_event.id
+            parent_event_id=parent_event.id,
         )
 
         assert child_event.parent_event_id == parent_event.id
@@ -55,7 +54,7 @@ class TestTraceEvent:
             event_type=EventType.TOOL_CALL,
             agent_id="test_agent",
             data={},
-            timestamp=custom_time
+            timestamp=custom_time,
         )
 
         assert event.timestamp == custom_time
@@ -65,7 +64,7 @@ class TestTraceEvent:
         event = TraceEvent(
             event_type=EventType.TOOL_CALL,
             agent_id="test_agent",
-            data={"tool": "web_search", "result": "success"}
+            data={"tool": "web_search", "result": "success"},
         )
 
         event_dict = event.to_dict()
@@ -83,7 +82,7 @@ class TestTraceEvent:
             "agent_id": "test_agent",
             "data": {"tool": "web_search"},
             "timestamp": "2023-01-01T12:00:00Z",
-            "id": "test-id"
+            "id": "test-id",
         }
 
         event = TraceEvent.from_dict(event_dict)
@@ -98,7 +97,7 @@ class TestTraceEvent:
         event = TraceEvent(
             event_type=EventType.TOOL_CALL,
             agent_id="test_agent",
-            data={"tool": "web_search"}
+            data={"tool": "web_search"},
         )
 
         str_repr = str(event)
@@ -123,7 +122,7 @@ class TestTraceEvent:
             "after_tool_execution",
             "state_change",
             "performance_metric",
-            "custom"
+            "custom",
         ]
 
         for event_type in expected_types:
@@ -151,8 +150,7 @@ class TestBreakpoint:
     def test_breakpoint_creation_with_tool(self):
         """Test creating a breakpoint for a specific tool."""
         breakpoint = Breakpoint(
-            breakpoint_type=BreakpointType.BEFORE_TOOL,
-            tool_name="web_search"
+            breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search"
         )
 
         assert breakpoint.breakpoint_type == BreakpointType.BEFORE_TOOL
@@ -160,12 +158,12 @@ class TestBreakpoint:
 
     def test_breakpoint_creation_with_condition(self):
         """Test creating a breakpoint with a condition."""
+
         def error_condition(event):
             return "error" in str(event.data).lower()
 
         breakpoint = Breakpoint(
-            breakpoint_type=BreakpointType.CONDITIONAL,
-            condition=error_condition
+            breakpoint_type=BreakpointType.CONDITIONAL, condition=error_condition
         )
 
         assert breakpoint.breakpoint_type == BreakpointType.CONDITIONAL
@@ -174,8 +172,7 @@ class TestBreakpoint:
     def test_breakpoint_creation_disabled(self):
         """Test creating a disabled breakpoint."""
         breakpoint = Breakpoint(
-            breakpoint_type=BreakpointType.BEFORE_TOOL,
-            enabled=False
+            breakpoint_type=BreakpointType.BEFORE_TOOL, enabled=False
         )
 
         assert breakpoint.enabled is False
@@ -183,15 +180,14 @@ class TestBreakpoint:
     def test_matches_event_before_tool(self):
         """Test breakpoint matching for BEFORE_TOOL events."""
         breakpoint = Breakpoint(
-            breakpoint_type=BreakpointType.BEFORE_TOOL,
-            tool_name="web_search"
+            breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search"
         )
 
         # Matching event
         event = TraceEvent(
             event_type=EventType.BEFORE_TOOL_EXECUTION,
             agent_id="test_agent",
-            data={"tool_name": "web_search"}
+            data={"tool_name": "web_search"},
         )
         assert breakpoint.matches_event(event) is True
 
@@ -199,7 +195,7 @@ class TestBreakpoint:
         event2 = TraceEvent(
             event_type=EventType.BEFORE_TOOL_EXECUTION,
             agent_id="test_agent",
-            data={"tool_name": "file_read"}
+            data={"tool_name": "file_read"},
         )
         assert breakpoint.matches_event(event2) is False
 
@@ -207,7 +203,7 @@ class TestBreakpoint:
         event3 = TraceEvent(
             event_type=EventType.TOOL_CALL,
             agent_id="test_agent",
-            data={"tool_name": "web_search"}
+            data={"tool_name": "web_search"},
         )
         assert breakpoint.matches_event(event3) is False
 
@@ -218,7 +214,7 @@ class TestBreakpoint:
         event = TraceEvent(
             event_type=EventType.AFTER_TOOL_EXECUTION,
             agent_id="test_agent",
-            data={"tool_name": "web_search", "result": "success"}
+            data={"tool_name": "web_search", "result": "success"},
         )
         assert breakpoint.matches_event(event) is True
 
@@ -229,25 +225,25 @@ class TestBreakpoint:
         event = TraceEvent(
             event_type=EventType.ERROR,
             agent_id="test_agent",
-            data={"error": "Something went wrong"}
+            data={"error": "Something went wrong"},
         )
         assert breakpoint.matches_event(event) is True
 
     def test_matches_event_conditional(self):
         """Test breakpoint matching for conditional breakpoints."""
+
         def has_error_data(event):
             return "error" in event.data.get("message", "").lower()
 
         breakpoint = Breakpoint(
-            breakpoint_type=BreakpointType.CONDITIONAL,
-            condition=has_error_data
+            breakpoint_type=BreakpointType.CONDITIONAL, condition=has_error_data
         )
 
         # Matching event
         event1 = TraceEvent(
             event_type=EventType.TOOL_RESULT,
             agent_id="test_agent",
-            data={"message": "An error occurred"}
+            data={"message": "An error occurred"},
         )
         assert breakpoint.matches_event(event1) is True
 
@@ -255,21 +251,20 @@ class TestBreakpoint:
         event2 = TraceEvent(
             event_type=EventType.TOOL_RESULT,
             agent_id="test_agent",
-            data={"message": "Success"}
+            data={"message": "Success"},
         )
         assert breakpoint.matches_event(event2) is False
 
     def test_matches_event_disabled(self):
         """Test that disabled breakpoints don't match."""
         breakpoint = Breakpoint(
-            breakpoint_type=BreakpointType.BEFORE_TOOL,
-            enabled=False
+            breakpoint_type=BreakpointType.BEFORE_TOOL, enabled=False
         )
 
         event = TraceEvent(
             event_type=EventType.BEFORE_TOOL_EXECUTION,
             agent_id="test_agent",
-            data={"tool_name": "web_search"}
+            data={"tool_name": "web_search"},
         )
         assert breakpoint.matches_event(event) is False
 
@@ -288,8 +283,7 @@ class TestBreakpoint:
     def test_breakpoint_string_representation(self):
         """Test string representation of breakpoint."""
         breakpoint = Breakpoint(
-            breakpoint_type=BreakpointType.BEFORE_TOOL,
-            tool_name="web_search"
+            breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search"
         )
 
         str_repr = str(breakpoint)
@@ -300,16 +294,13 @@ class TestBreakpoint:
     def test_breakpoint_equality(self):
         """Test breakpoint equality comparison."""
         bp1 = Breakpoint(
-            breakpoint_type=BreakpointType.BEFORE_TOOL,
-            tool_name="web_search"
+            breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search"
         )
         bp2 = Breakpoint(
-            breakpoint_type=BreakpointType.BEFORE_TOOL,
-            tool_name="web_search"
+            breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search"
         )
         bp3 = Breakpoint(
-            breakpoint_type=BreakpointType.AFTER_TOOL,
-            tool_name="web_search"
+            breakpoint_type=BreakpointType.AFTER_TOOL, tool_name="web_search"
         )
 
         assert bp1 == bp2
@@ -323,7 +314,7 @@ class TestBreakpoint:
             "on_error",
             "on_memory_write",
             "on_state_change",
-            "conditional"
+            "conditional",
         ]
 
         for bp_type in expected_types:

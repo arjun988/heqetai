@@ -1,6 +1,7 @@
 """
 Performance tests for the AgentDebugger performance monitoring.
 """
+
 import pytest
 import time
 from unittest.mock import Mock, patch
@@ -30,7 +31,7 @@ class TestPerformanceMonitor:
         event = TraceEvent(
             event_type=EventType.TOOL_CALL,
             agent_id="test_agent",
-            data={"tool": "web_search"}
+            data={"tool": "web_search"},
         )
 
         performance_monitor.record_event(event)
@@ -98,7 +99,7 @@ class TestPerformanceMonitor:
         """Test getting events per second rate."""
         # Simulate 10 events over 2 seconds
         performance_monitor.event_count = 10
-        with patch.object(performance_monitor, 'get_elapsed_time', return_value=2.0):
+        with patch.object(performance_monitor, "get_elapsed_time", return_value=2.0):
             eps = performance_monitor.get_events_per_second()
             assert eps == 5.0
 
@@ -123,7 +124,9 @@ class TestPerformanceMonitor:
         """Test getting a comprehensive performance report."""
         # Add some test data
         performance_monitor.record_event(TraceEvent(EventType.TOOL_CALL, "agent1", {}))
-        performance_monitor.record_event(TraceEvent(EventType.MEMORY_WRITE, "agent1", {}))
+        performance_monitor.record_event(
+            TraceEvent(EventType.MEMORY_WRITE, "agent1", {})
+        )
         performance_monitor.record_memory_usage(45.0)
         performance_monitor.record_memory_usage(50.0)
 
@@ -154,7 +157,7 @@ class TestPerformanceMonitor:
             event = TraceEvent(
                 event_type=EventType.TOOL_CALL,
                 agent_id=f"agent_{i % 10}",
-                data={"iteration": i}
+                data={"iteration": i},
             )
             performance_monitor.record_event(event)
 
@@ -217,7 +220,9 @@ class TestPerformanceMonitor:
         """Test cleanup of old performance data."""
         # Add lots of data
         for i in range(100):
-            performance_monitor.record_event(TraceEvent(EventType.TOOL_CALL, "agent", {}))
+            performance_monitor.record_event(
+                TraceEvent(EventType.TOOL_CALL, "agent", {})
+            )
             performance_monitor.record_memory_usage(float(i))
 
         # Cleanup old data (keep only last 50)
@@ -238,6 +243,7 @@ class TestPerformanceMonitor:
         assert export_path.exists()
 
         import json
+
         with open(export_path) as f:
             data = json.load(f)
 

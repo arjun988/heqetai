@@ -1,12 +1,14 @@
 """
 Web interface tests for the AgentDebugger web portal.
 """
+
 import pytest
 from unittest.mock import Mock, patch
 import json
 
 try:
     from agent_debugger.web.portal import WebPortal
+
     WEB_AVAILABLE = True
 except ImportError:
     WEB_AVAILABLE = False
@@ -60,11 +62,13 @@ class TestWebPortal:
     def test_get_dashboard_data(self, web_portal):
         """Test getting dashboard data."""
         # Add some mock data to debugger
-        web_portal.debugger.record_event(Mock(
-            event_type="tool_call",
-            agent_id="test_agent",
-            data={"tool": "web_search"}
-        ))
+        web_portal.debugger.record_event(
+            Mock(
+                event_type="tool_call",
+                agent_id="test_agent",
+                data={"tool": "web_search"},
+            )
+        )
 
         data = web_portal._get_dashboard_data()
 
@@ -94,16 +98,12 @@ class TestWebPortal:
     def test_get_trace_timeline(self, web_portal):
         """Test getting trace timeline data."""
         # Add some events
-        web_portal.debugger.record_event(Mock(
-            event_type="tool_call",
-            agent_id="agent1",
-            data={"tool": "search"}
-        ))
-        web_portal.debugger.record_event(Mock(
-            event_type="memory_write",
-            agent_id="agent1",
-            data={"key": "result"}
-        ))
+        web_portal.debugger.record_event(
+            Mock(event_type="tool_call", agent_id="agent1", data={"tool": "search"})
+        )
+        web_portal.debugger.record_event(
+            Mock(event_type="memory_write", agent_id="agent1", data={"key": "result"})
+        )
 
         timeline = web_portal._get_trace_timeline()
 
@@ -136,7 +136,7 @@ class TestWebPortal:
     def test_export_trace_web(self, mock_open, web_portal, tmp_path):
         """Test exporting trace via web interface."""
         export_path = tmp_path / "web_export.json"
-        mock_open.return_value.__enter__.return_value = export_path.open('w')
+        mock_open.return_value.__enter__.return_value = export_path.open("w")
 
         result = web_portal._export_trace("json", str(export_path))
 
@@ -170,9 +170,7 @@ class TestWebPortal:
         web_portal.start()
 
         mock_run.assert_called_once_with(
-            host=web_portal.host,
-            port=web_portal.port,
-            debug=False
+            host=web_portal.host, port=web_portal.port, debug=False
         )
 
     @patch("flask.Flask.run")
@@ -181,16 +179,12 @@ class TestWebPortal:
         portal = WebPortal(debugger, debug=True)
         portal.start()
 
-        mock_run.assert_called_once_with(
-            host=portal.host,
-            port=portal.port,
-            debug=True
-        )
+        mock_run.assert_called_once_with(host=portal.host, port=portal.port, debug=True)
 
     def test_stop_server(self, web_portal):
         """Test stopping the web server."""
         # Mock the server shutdown
-        with patch.object(web_portal, 'server', create=True) as mock_server:
+        with patch.object(web_portal, "server", create=True) as mock_server:
             mock_server.shutdown = Mock()
             web_portal.stop()
 
@@ -202,7 +196,7 @@ class TestWebPortal:
         assert web_portal.is_running() is False
 
         # Mock server thread
-        with patch.object(web_portal, 'server_thread', create=True) as mock_thread:
+        with patch.object(web_portal, "server_thread", create=True) as mock_thread:
             mock_thread.is_alive.return_value = True
             assert web_portal.is_running() is True
 
@@ -218,22 +212,22 @@ class TestWebPortal:
     def test_cors_headers(self, web_portal):
         """Test CORS headers are properly set."""
         with web_portal.app.test_client() as client:
-            response = client.options('/api/dashboard')
+            response = client.options("/api/dashboard")
             assert response.status_code == 200
             # CORS headers should be present
-            assert 'Access-Control-Allow-Origin' in response.headers
+            assert "Access-Control-Allow-Origin" in response.headers
 
     def test_api_endpoints(self, web_portal):
         """Test main API endpoints are accessible."""
         with web_portal.app.test_client() as client:
             # Test dashboard endpoint
-            response = client.get('/api/dashboard')
+            response = client.get("/api/dashboard")
             assert response.status_code == 200
             data = json.loads(response.data)
             assert "events" in data
 
             # Test agents endpoint
-            response = client.get('/api/agents')
+            response = client.get("/api/agents")
             assert response.status_code == 200
             data = json.loads(response.data)
             assert isinstance(data, list)
@@ -242,11 +236,11 @@ class TestWebPortal:
         """Test that static files are served correctly."""
         with web_portal.app.test_client() as client:
             # Test main page
-            response = client.get('/')
+            response = client.get("/")
             assert response.status_code == 200
 
             # Test static CSS
-            response = client.get('/static/css/custom.css')
+            response = client.get("/static/css/custom.css")
             # May return 404 if file doesn't exist, but route should be configured
             assert response.status_code in [200, 404]  # 200 if file exists, 404 if not
 
@@ -262,7 +256,7 @@ class TestWebPortal:
         def make_request():
             try:
                 with web_portal.app.test_client() as client:
-                    response = client.get('/api/dashboard')
+                    response = client.get("/api/dashboard")
                     results.append(response.status_code)
             except Exception as e:
                 errors.append(str(e))

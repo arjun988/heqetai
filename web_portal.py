@@ -12,12 +12,10 @@ from agent_debugger.web import (
 )
 
 __all__ = [
-    'WebPortalDebugger',
-    'init_web_debugger',
-    'create_web_debugger',
-    'attach_agent_to_web',
-    'app',
-    'socketio',
+    "WebPortalDebugger",
+    "init_web_debugger",
+    "create_web_debugger",
+    "attach_agent_to_web",
+    "app",
+    "socketio",
 ]
-
-

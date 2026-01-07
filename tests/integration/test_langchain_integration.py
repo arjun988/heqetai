@@ -1,6 +1,7 @@
 """
 Integration tests for LangChain debugger integration.
 """
+
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 
@@ -43,24 +44,34 @@ class TestLangChainIntegration:
         assert len(integration.instrumented_agents) == 0
         assert len(integration.original_methods) == 0
 
-    def test_instrument_runnable_agent(self, langchain_integration, mock_langchain_agent):
+    def test_instrument_runnable_agent(
+        self, langchain_integration, mock_langchain_agent
+    ):
         """Test instrumenting a LangChain Runnable agent."""
         # Mock the invoke method to have our agent
-        mock_langchain_agent.invoke = Mock(return_value={"output": "instrumented response"})
+        mock_langchain_agent.invoke = Mock(
+            return_value={"output": "instrumented response"}
+        )
 
         # Mock the proxy creation
-        with patch.object(langchain_integration, '_create_proxy') as mock_proxy:
+        with patch.object(langchain_integration, "_create_proxy") as mock_proxy:
             mock_proxy.return_value = Mock()
-            instrumented = langchain_integration.instrument_agent(mock_langchain_agent, "test_agent")
+            instrumented = langchain_integration.instrument_agent(
+                mock_langchain_agent, "test_agent"
+            )
 
             mock_proxy.assert_called_once()
             assert instrumented is not mock_langchain_agent
 
-    def test_instrument_async_runnable_agent(self, langchain_integration, mock_async_langchain_agent):
+    def test_instrument_async_runnable_agent(
+        self, langchain_integration, mock_async_langchain_agent
+    ):
         """Test instrumenting an async LangChain Runnable agent."""
-        with patch.object(langchain_integration, '_create_proxy') as mock_proxy:
+        with patch.object(langchain_integration, "_create_proxy") as mock_proxy:
             mock_proxy.return_value = Mock()
-            instrumented = langchain_integration.instrument_agent(mock_async_langchain_agent, "async_agent")
+            instrumented = langchain_integration.instrument_agent(
+                mock_async_langchain_agent, "async_agent"
+            )
 
             mock_proxy.assert_called_once()
             assert instrumented is not mock_async_langchain_agent
@@ -71,8 +82,10 @@ class TestLangChainIntegration:
         del mock_langchain_agent.invoke
         del mock_langchain_agent.__call__
 
-        with patch.object(langchain_integration, '_wrap_method') as mock_wrap:
-            instrumented = langchain_integration.instrument_agent(mock_langchain_agent, "legacy_agent")
+        with patch.object(langchain_integration, "_wrap_method") as mock_wrap:
+            instrumented = langchain_integration.instrument_agent(
+                mock_langchain_agent, "legacy_agent"
+            )
 
             # Should call _wrap_method for the run method
             assert mock_wrap.called
@@ -84,8 +97,10 @@ class TestLangChainIntegration:
         del mock_langchain_agent.invoke
         del mock_langchain_agent.run
 
-        with patch.object(langchain_integration, '_wrap_method') as mock_wrap:
-            instrumented = langchain_integration.instrument_agent(mock_langchain_agent, "chain_agent")
+        with patch.object(langchain_integration, "_wrap_method") as mock_wrap:
+            instrumented = langchain_integration.instrument_agent(
+                mock_langchain_agent, "chain_agent"
+            )
 
             assert mock_wrap.called
             assert instrumented == mock_langchain_agent
@@ -97,8 +112,10 @@ class TestLangChainIntegration:
         del mock_langchain_agent.run
         del mock_langchain_agent.__call__
 
-        with patch.object(langchain_integration, '_wrap_method') as mock_wrap:
-            instrumented = langchain_integration.instrument_agent(mock_langchain_agent, "llm_chain")
+        with patch.object(langchain_integration, "_wrap_method") as mock_wrap:
+            instrumented = langchain_integration.instrument_agent(
+                mock_langchain_agent, "llm_chain"
+            )
 
             assert mock_wrap.called
             assert instrumented == mock_langchain_agent
@@ -110,10 +127,10 @@ class TestLangChainIntegration:
             "output": "test output",
             "intermediate_steps": [
                 {"action": "tool1", "result": "result1"},
-                {"action": "tool2", "result": "result2"}
+                {"action": "tool2", "result": "result2"},
             ],
             "total_tokens": 150,
-            "model_name": "gpt-3.5-turbo"
+            "model_name": "gpt-3.5-turbo",
         }
 
         events = langchain_integration.extract_events("test_agent", execution_data)
@@ -122,7 +139,9 @@ class TestLangChainIntegration:
         assert all(isinstance(event, TraceEvent) for event in events)
         assert all(event.agent_id == "test_agent" for event in events)
 
-    def test_get_agent_state_langchain(self, langchain_integration, mock_langchain_agent):
+    def test_get_agent_state_langchain(
+        self, langchain_integration, mock_langchain_agent
+    ):
         """Test getting agent state for LangChain agent."""
         langchain_integration.instrumented_agents["test_agent"] = mock_langchain_agent
 
@@ -143,7 +162,9 @@ class TestLangChainIntegration:
         state = langchain_integration.get_agent_state("nonexistent")
         assert state is None
 
-    def test_list_instrumented_agents(self, langchain_integration, mock_langchain_agent):
+    def test_list_instrumented_agents(
+        self, langchain_integration, mock_langchain_agent
+    ):
         """Test listing instrumented agents."""
         langchain_integration.instrumented_agents["agent1"] = mock_langchain_agent
         langchain_integration.instrumented_agents["agent2"] = Mock()
@@ -203,13 +224,15 @@ class TestLangChainIntegration:
         assert health["instrumented_agents"] == 2
         assert "timestamp" in health
 
-    def test_debugger_events_integration(self, langchain_integration, mock_langchain_agent):
+    def test_debugger_events_integration(
+        self, langchain_integration, mock_langchain_agent
+    ):
         """Test that integration properly emits events to debugger."""
-        with patch.object(langchain_integration.debugger, 'record_event') as mock_record:
+        with patch.object(
+            langchain_integration.debugger, "record_event"
+        ) as mock_record:
             langchain_integration._emit_framework_event(
-                "test_event",
-                "test_agent",
-                {"key": "value"}
+                "test_event", "test_agent", {"key": "value"}
             )
 
             mock_record.assert_called_once()
@@ -219,8 +242,10 @@ class TestLangChainIntegration:
             assert event.agent_id == "test_agent"
             assert event.data["key"] == "value"
 
-    @patch('langchain.schema.BaseMessage')
-    def test_handle_langchain_message_conversion(self, mock_message, langchain_integration):
+    @patch("langchain.schema.BaseMessage")
+    def test_handle_langchain_message_conversion(
+        self, mock_message, langchain_integration
+    ):
         """Test handling LangChain message objects."""
         # Mock a LangChain message
         mock_message.content = "Test message"
@@ -230,7 +255,7 @@ class TestLangChainIntegration:
         execution_data = {
             "input": mock_message,
             "output": "response",
-            "intermediate_steps": []
+            "intermediate_steps": [],
         }
 
         events = langchain_integration.extract_events("test_agent", execution_data)
@@ -246,14 +271,16 @@ class TestLangChainIntegration:
         # Should handle gracefully
         assert result is None
 
-    def test_multiple_agents_same_type(self, langchain_integration, mock_langchain_agent):
+    def test_multiple_agents_same_type(
+        self, langchain_integration, mock_langchain_agent
+    ):
         """Test instrumenting multiple agents of the same type."""
         agent1 = Mock()
         agent1.invoke = Mock(return_value="response1")
         agent2 = Mock()
         agent2.invoke = Mock(return_value="response2")
 
-        with patch.object(langchain_integration, '_create_proxy') as mock_proxy:
+        with patch.object(langchain_integration, "_create_proxy") as mock_proxy:
             mock_proxy.return_value = Mock()
             langchain_integration.instrument_agent(agent1, "agent1")
             langchain_integration.instrument_agent(agent2, "agent2")

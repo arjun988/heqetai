@@ -15,15 +15,13 @@ from agent_debugger import (
 )
 
 __all__ = [
-    'AgentDebugger',
-    'EventType',
-    'BreakpointType',
-    'TraceEvent',
-    'Breakpoint',
-    'AgentState',
-    'MockRegistry',
-    'PerformanceMonitor',
-    'DebugConsole',
+    "AgentDebugger",
+    "EventType",
+    "BreakpointType",
+    "TraceEvent",
+    "Breakpoint",
+    "AgentState",
+    "MockRegistry",
+    "PerformanceMonitor",
+    "DebugConsole",
 ]
-
-

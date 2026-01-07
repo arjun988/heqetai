@@ -18,8 +18,13 @@ from .state import AgentState
 class AgentDebugger:
     """Main debugger class that wraps and monitors agent execution"""
 
-    def __init__(self, mode: str = "console", enable_replay: bool = True,
-                 enable_performance_monitoring: bool = True, enable_context_management: bool = True):
+    def __init__(
+        self,
+        mode: str = "console",
+        enable_replay: bool = True,
+        enable_performance_monitoring: bool = True,
+        enable_context_management: bool = True,
+    ):
         self.mode = mode
         self.enable_replay = enable_replay
         self.enable_performance_monitoring = enable_performance_monitoring
@@ -28,7 +33,9 @@ class AgentDebugger:
         self.breakpoints: List[Breakpoint] = []
         self.agent_states: Dict[str, AgentState] = {}
         self.mock_registry = MockRegistry()
-        self.performance_monitor = PerformanceMonitor() if enable_performance_monitoring else None
+        self.performance_monitor = (
+            PerformanceMonitor() if enable_performance_monitoring else None
+        )
         self.context_manager = ContextManager() if enable_context_management else None
         self.console = DebugConsole(self) if mode == "console" else None
         self._attached_agents: Dict[str, Any] = {}
@@ -37,7 +44,9 @@ class AgentDebugger:
         self._console_quit: bool = False
 
         if self.mode == "console":
-            print("🟢 Console debug mode enabled. Execution will pause at breakpoints (type 'h' when paused).")
+            print(
+                "🟢 Console debug mode enabled. Execution will pause at breakpoints (type 'h' when paused)."
+            )
 
     def attach(self, agent, agent_id: Optional[str] = None):
         """Attach debugger to an agent"""
@@ -51,7 +60,7 @@ class AgentDebugger:
             event_type=EventType.AGENT_CREATED,
             agent_id=agent_id,
             step_id=f"create_{int(time.time())}",
-            data={'agent_type': type(agent).__name__}
+            data={"agent_type": type(agent).__name__},
         )
         self._emit_event(creation_event)
 
@@ -62,20 +71,22 @@ class AgentDebugger:
     def _instrument_agent(self, agent, agent_id: str):
         original_methods = {}
 
-        if hasattr(agent, 'execute_tool'):
-            original_methods['execute_tool'] = agent.execute_tool
+        if hasattr(agent, "execute_tool"):
+            original_methods["execute_tool"] = agent.execute_tool
             agent.execute_tool = self._wrap_tool_execution(agent.execute_tool, agent_id)
 
-        if hasattr(agent, 'call_llm'):
-            original_methods['call_llm'] = agent.call_llm
+        if hasattr(agent, "call_llm"):
+            original_methods["call_llm"] = agent.call_llm
             agent.call_llm = self._wrap_llm_call(agent.call_llm, agent_id)
 
-        if hasattr(agent, 'update_memory'):
-            original_methods['update_memory'] = agent.update_memory
-            agent.update_memory = self._wrap_memory_update(agent.update_memory, agent_id)
+        if hasattr(agent, "update_memory"):
+            original_methods["update_memory"] = agent.update_memory
+            agent.update_memory = self._wrap_memory_update(
+                agent.update_memory, agent_id
+            )
 
-        if hasattr(agent, 'execute_task'):
-            original_methods['execute_task'] = agent.execute_task
+        if hasattr(agent, "execute_task"):
+            original_methods["execute_task"] = agent.execute_task
             agent.execute_task = self._wrap_task_execution(agent.execute_task, agent_id)
 
         agent._agentdb_original_methods = original_methods
@@ -92,10 +103,10 @@ class AgentDebugger:
                 event_type=EventType.TOOL_CALL_START,
                 agent_id=agent_id,
                 step_id=f"tool_{int(time.time())}_{tool_name}",
-                data={'tool_name': tool_name, 'args': args, 'kwargs': kwargs}
+                data={"tool_name": tool_name, "args": args, "kwargs": kwargs},
             )
             if self.performance_monitor:
-                self.performance_monitor.start_timing('tool_execution', event.id)
+                self.performance_monitor.start_timing("tool_execution", event.id)
             self._emit_event(event)
 
             if self._should_break(event):
@@ -108,15 +119,21 @@ class AgentDebugger:
                     event_type=EventType.TOOL_CALL_END,
                     agent_id=agent_id,
                     step_id=event.step_id,
-                    data={'tool_name': tool_name, 'result': result, 'duration': duration},
+                    data={
+                        "tool_name": tool_name,
+                        "result": result,
+                        "duration": duration,
+                    },
                     parent_event_id=event.id,
-                    duration=duration
+                    duration=duration,
                 )
                 self._emit_event(end_event)
                 if self.performance_monitor:
-                    self.performance_monitor.record_metric('tool_execution_times', duration)
+                    self.performance_monitor.record_metric(
+                        "tool_execution_times", duration
+                    )
                     agent_state = self.agent_states[agent_id]
-                    agent_state.performance_stats['total_tool_time'] += duration
+                    agent_state.performance_stats["total_tool_time"] += duration
                 state = self.agent_states[agent_id]
                 state.tool_outputs[tool_name] = result
                 return result
@@ -126,9 +143,14 @@ class AgentDebugger:
                     event_type=EventType.ERROR,
                     agent_id=agent_id,
                     step_id=event.step_id,
-                    data={'tool_name': tool_name, 'error': str(e), 'error_type': type(e).__name__, 'duration': duration},
+                    data={
+                        "tool_name": tool_name,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "duration": duration,
+                    },
                     parent_event_id=event.id,
-                    duration=duration
+                    duration=duration,
                 )
                 self._emit_event(error_event)
                 state = self.agent_states[agent_id]
@@ -149,10 +171,13 @@ class AgentDebugger:
                 event_type=EventType.LLM_CALL_START,
                 agent_id=agent_id,
                 step_id=f"llm_{int(time.time())}",
-                data={'prompt': prompt[:200] + "..." if len(prompt) > 200 else prompt, 'full_prompt_length': len(prompt)}
+                data={
+                    "prompt": prompt[:200] + "..." if len(prompt) > 200 else prompt,
+                    "full_prompt_length": len(prompt),
+                },
             )
             if self.performance_monitor:
-                self.performance_monitor.start_timing('llm_call', event.id)
+                self.performance_monitor.start_timing("llm_call", event.id)
             self._emit_event(event)
 
             response = original_method(prompt, *args, **kwargs)
@@ -161,22 +186,36 @@ class AgentDebugger:
                 event_type=EventType.LLM_CALL_END,
                 agent_id=agent_id,
                 step_id=event.step_id,
-                data={'response': response[:200] + "..." if len(str(response)) > 200 else str(response), 'full_response_length': len(str(response)), 'duration': duration},
+                data={
+                    "response": (
+                        response[:200] + "..."
+                        if len(str(response)) > 200
+                        else str(response)
+                    ),
+                    "full_response_length": len(str(response)),
+                    "duration": duration,
+                },
                 parent_event_id=event.id,
-                duration=duration
+                duration=duration,
             )
             self._emit_event(end_event)
 
             if self.performance_monitor:
-                self.performance_monitor.record_metric('llm_response_times', duration)
+                self.performance_monitor.record_metric("llm_response_times", duration)
                 agent_state = self.agent_states[agent_id]
-                agent_state.performance_stats['total_llm_time'] += duration
-                agent_state.performance_stats['avg_response_time'] = (
-                    agent_state.performance_stats['total_llm_time'] / (agent_state.tasks_completed + 1)
+                agent_state.performance_stats["total_llm_time"] += duration
+                agent_state.performance_stats["avg_response_time"] = (
+                    agent_state.performance_stats["total_llm_time"]
+                    / (agent_state.tasks_completed + 1)
                 )
 
             state = self.agent_states[agent_id]
-            state.last_llm_call = {'prompt': prompt, 'response': response, 'timestamp': event.timestamp, 'duration': duration}
+            state.last_llm_call = {
+                "prompt": prompt,
+                "response": response,
+                "timestamp": event.timestamp,
+                "duration": duration,
+            }
             return response
 
         return wrapped_llm_call
@@ -187,7 +226,15 @@ class AgentDebugger:
                 event_type=EventType.MEMORY_WRITE,
                 agent_id=agent_id,
                 step_id=f"memory_{int(time.time())}",
-                data={'key': key, 'value': str(value)[:100] + "..." if len(str(value)) > 100 else str(value), 'operation': 'write'}
+                data={
+                    "key": key,
+                    "value": (
+                        str(value)[:100] + "..."
+                        if len(str(value)) > 100
+                        else str(value)
+                    ),
+                    "operation": "write",
+                },
             )
             self._emit_event(event)
 
@@ -208,7 +255,11 @@ class AgentDebugger:
                 event_type=EventType.TASK_START,
                 agent_id=agent_id,
                 step_id=f"task_{int(time.time())}",
-                data={'task_description': task_description, 'args': args, 'kwargs': kwargs}
+                data={
+                    "task_description": task_description,
+                    "args": args,
+                    "kwargs": kwargs,
+                },
             )
             self._emit_event(event)
             try:
@@ -218,9 +269,9 @@ class AgentDebugger:
                     event_type=EventType.TASK_END,
                     agent_id=agent_id,
                     step_id=event.step_id,
-                    data={'result': result, 'duration': duration},
+                    data={"result": result, "duration": duration},
                     parent_event_id=event.id,
-                    duration=duration
+                    duration=duration,
                 )
                 self._emit_event(end_event)
                 state = self.agent_states[agent_id]
@@ -232,9 +283,13 @@ class AgentDebugger:
                     event_type=EventType.ERROR,
                     agent_id=agent_id,
                     step_id=event.step_id,
-                    data={'task': task_description, 'error': str(e), 'duration': duration},
+                    data={
+                        "task": task_description,
+                        "error": str(e),
+                        "duration": duration,
+                    },
                     parent_event_id=event.id,
-                    duration=duration
+                    duration=duration,
                 )
                 self._emit_event(error_event)
                 state = self.agent_states[agent_id]
@@ -252,24 +307,51 @@ class AgentDebugger:
             if not bp.enabled:
                 continue
             matches = False
-            if bp.breakpoint_type == bp.breakpoint_type.BEFORE_TOOL and event.event_type == EventType.TOOL_CALL_START:
-                if bp.tool_name is None or bp.tool_name == event.data.get('tool_name'):
+            if (
+                bp.breakpoint_type == bp.breakpoint_type.BEFORE_TOOL
+                and event.event_type == EventType.TOOL_CALL_START
+            ):
+                if bp.tool_name is None or bp.tool_name == event.data.get("tool_name"):
                     matches = True
-            elif bp.breakpoint_type == bp.breakpoint_type.AFTER_TOOL and event.event_type == EventType.TOOL_CALL_END:
+            elif (
+                bp.breakpoint_type == bp.breakpoint_type.AFTER_TOOL
+                and event.event_type == EventType.TOOL_CALL_END
+            ):
                 matches = True
-            elif bp.breakpoint_type == bp.breakpoint_type.BEFORE_MEMORY_WRITE and event.event_type == EventType.MEMORY_WRITE:
+            elif (
+                bp.breakpoint_type == bp.breakpoint_type.BEFORE_MEMORY_WRITE
+                and event.event_type == EventType.MEMORY_WRITE
+            ):
                 matches = True
-            elif bp.breakpoint_type == bp.breakpoint_type.ON_ERROR and event.event_type == EventType.ERROR:
+            elif (
+                bp.breakpoint_type == bp.breakpoint_type.ON_ERROR
+                and event.event_type == EventType.ERROR
+            ):
                 matches = True
-            elif bp.breakpoint_type == bp.breakpoint_type.BEFORE_REASONING and event.event_type == EventType.REASONING_START:
+            elif (
+                bp.breakpoint_type == bp.breakpoint_type.BEFORE_REASONING
+                and event.event_type == EventType.REASONING_START
+            ):
                 matches = True
-            elif bp.breakpoint_type == bp.breakpoint_type.BEFORE_LLM and event.event_type == EventType.LLM_CALL_START:
+            elif (
+                bp.breakpoint_type == bp.breakpoint_type.BEFORE_LLM
+                and event.event_type == EventType.LLM_CALL_START
+            ):
                 matches = True
-            elif bp.breakpoint_type == bp.breakpoint_type.AFTER_LLM and event.event_type == EventType.LLM_CALL_END:
+            elif (
+                bp.breakpoint_type == bp.breakpoint_type.AFTER_LLM
+                and event.event_type == EventType.LLM_CALL_END
+            ):
                 matches = True
-            elif bp.breakpoint_type == bp.breakpoint_type.ON_AGENT_CREATE and event.event_type == EventType.AGENT_CREATED:
+            elif (
+                bp.breakpoint_type == bp.breakpoint_type.ON_AGENT_CREATE
+                and event.event_type == EventType.AGENT_CREATED
+            ):
                 matches = True
-            elif bp.breakpoint_type == bp.breakpoint_type.ON_TASK_START and event.event_type == EventType.TASK_START:
+            elif (
+                bp.breakpoint_type == bp.breakpoint_type.ON_TASK_START
+                and event.event_type == EventType.TASK_START
+            ):
                 matches = True
 
             if bp.agent_id and bp.agent_id != event.agent_id:
@@ -291,7 +373,9 @@ class AgentDebugger:
     def _trigger_breakpoint(self, event: TraceEvent, agent_id: str):
         state = self.agent_states[agent_id]
         state.is_paused = True
-        print(f"\n⏸️  Debugger paused on {event.event_type.value} for agent '{agent_id}'.")
+        print(
+            f"\n⏸️  Debugger paused on {event.event_type.value} for agent '{agent_id}'."
+        )
         if self.console:
             self.console.start(event, state)
 
@@ -301,7 +385,9 @@ class AgentDebugger:
     def remove_breakpoint(self, breakpoint_id: str):
         self.breakpoints = [bp for bp in self.breakpoints if bp.id != breakpoint_id]
 
-    def add_event_handler(self, event_type: EventType, handler: Callable[[TraceEvent], None]):
+    def add_event_handler(
+        self, event_type: EventType, handler: Callable[[TraceEvent], None]
+    ):
         if event_type not in self._event_handlers:
             self._event_handlers[event_type] = []
         self._event_handlers[event_type].append(handler)
@@ -316,57 +402,67 @@ class AgentDebugger:
         agent_stats = {}
         for agent_id, state in self.agent_states.items():
             agent_stats[agent_id] = {
-                'tasks_completed': state.tasks_completed,
-                'errors_encountered': state.errors_encountered,
-                'created_at': state.created_at.isoformat()
+                "tasks_completed": state.tasks_completed,
+                "errors_encountered": state.errors_encountered,
+                "created_at": state.created_at.isoformat(),
             }
         return {
-            'total_events': len(self.trace_events),
-            'events_by_type': {k: len(v) for k, v in events_by_type.items()},
-            'execution_time': (self.trace_events[-1].timestamp - self.trace_events[0].timestamp).total_seconds() if self.trace_events else 0,
-            'agents': list(self.agent_states.keys()),
-            'agent_stats': agent_stats,
-            'performance_stats': self.performance_monitor.get_statistics() if self.performance_monitor else {}
+            "total_events": len(self.trace_events),
+            "events_by_type": {k: len(v) for k, v in events_by_type.items()},
+            "execution_time": (
+                (
+                    self.trace_events[-1].timestamp - self.trace_events[0].timestamp
+                ).total_seconds()
+                if self.trace_events
+                else 0
+            ),
+            "agents": list(self.agent_states.keys()),
+            "agent_stats": agent_stats,
+            "performance_stats": (
+                self.performance_monitor.get_statistics()
+                if self.performance_monitor
+                else {}
+            ),
         }
 
     def export_trace(self, filename: str):
         trace_data = {
-            'summary': self.get_trace_summary(),
-            'events': [
+            "summary": self.get_trace_summary(),
+            "events": [
                 {
-                    'id': event.id,
-                    'timestamp': event.timestamp.isoformat(),
-                    'event_type': event.event_type.value,
-                    'agent_id': event.agent_id,
-                    'step_id': event.step_id,
-                    'data': event.data,
-                    'parent_event_id': event.parent_event_id,
-                    'metadata': event.metadata,
-                    'duration': event.duration
+                    "id": event.id,
+                    "timestamp": event.timestamp.isoformat(),
+                    "event_type": event.event_type.value,
+                    "agent_id": event.agent_id,
+                    "step_id": event.step_id,
+                    "data": event.data,
+                    "parent_event_id": event.parent_event_id,
+                    "metadata": event.metadata,
+                    "duration": event.duration,
                 }
                 for event in self.trace_events
-            ]
+            ],
         }
-        with open(filename, 'w') as f:
+        with open(filename, "w") as f:
             json.dump(trace_data, f, indent=2)
         print(f"📄 Trace exported to {filename}")
 
     def replay_from_file(self, filename: str):
         try:
-            with open(filename, 'r') as f:
+            with open(filename, "r") as f:
                 trace_data = json.load(f)
             events: List[TraceEvent] = []
-            for event_data in trace_data['events']:
+            for event_data in trace_data["events"]:
                 event = TraceEvent(
-                    id=event_data['id'],
-                    timestamp=datetime.fromisoformat(event_data['timestamp']),
-                    event_type=EventType(event_data['event_type']),
-                    agent_id=event_data['agent_id'],
-                    step_id=event_data['step_id'],
-                    data=event_data['data'],
-                    parent_event_id=event_data.get('parent_event_id'),
-                    metadata=event_data.get('metadata', {}),
-                    duration=event_data.get('duration')
+                    id=event_data["id"],
+                    timestamp=datetime.fromisoformat(event_data["timestamp"]),
+                    event_type=EventType(event_data["event_type"]),
+                    agent_id=event_data["agent_id"],
+                    step_id=event_data["step_id"],
+                    data=event_data["data"],
+                    parent_event_id=event_data.get("parent_event_id"),
+                    metadata=event_data.get("metadata", {}),
+                    duration=event_data.get("duration"),
                 )
                 events.append(event)
             self.mock_registry.set_replay_mode(events)
@@ -382,28 +478,30 @@ class AgentDebugger:
                     handler(event)
                 except Exception as e:
                     print(f"Error in event handler: {e}")
-        
+
         # Auto-capture context from events if context management is enabled
         if self.context_manager and self.enable_context_management:
             self._auto_capture_context(event)
 
     # Context Management Methods
-    
-    def add_context(self, 
-                   type: ContextType,
-                   key: str,
-                   value: Any,
-                   priority: ContextPriority = ContextPriority.MEDIUM,
-                   expires_in: Optional[timedelta] = None,
-                   tags: Optional[List[str]] = None,
-                   metadata: Optional[Dict[str, Any]] = None,
-                   agent_id: Optional[str] = None,
-                   step_id: Optional[str] = None) -> Optional[str]:
+
+    def add_context(
+        self,
+        type: ContextType,
+        key: str,
+        value: Any,
+        priority: ContextPriority = ContextPriority.MEDIUM,
+        expires_in: Optional[timedelta] = None,
+        tags: Optional[List[str]] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        agent_id: Optional[str] = None,
+        step_id: Optional[str] = None,
+    ) -> Optional[str]:
         """Add a new context item"""
         if not self.context_manager:
             print("❌ Context management is not enabled")
             return None
-        
+
         return self.context_manager.add_context(
             type=type,
             key=key,
@@ -413,21 +511,23 @@ class AgentDebugger:
             tags=tags,
             metadata=metadata,
             agent_id=agent_id,
-            step_id=step_id
+            step_id=step_id,
         )
-    
+
     def get_context(self, context_id: str):
         """Get a context item by ID"""
         if not self.context_manager:
             return None
         return self.context_manager.get_context(context_id)
-    
-    def search_contexts(self, 
-                       query: str,
-                       type_filter: Optional[ContextType] = None,
-                       agent_filter: Optional[str] = None,
-                       tag_filter: Optional[List[str]] = None,
-                       priority_filter: Optional[List[ContextPriority]] = None):
+
+    def search_contexts(
+        self,
+        query: str,
+        type_filter: Optional[ContextType] = None,
+        agent_filter: Optional[str] = None,
+        tag_filter: Optional[List[str]] = None,
+        priority_filter: Optional[List[ContextPriority]] = None,
+    ):
         """Search context items with various filters"""
         if not self.context_manager:
             return []
@@ -436,127 +536,133 @@ class AgentDebugger:
             type_filter=type_filter,
             agent_filter=agent_filter,
             tag_filter=tag_filter,
-            priority_filter=priority_filter
+            priority_filter=priority_filter,
         )
-    
+
     def update_context(self, context_id: str, **updates) -> bool:
         """Update a context item"""
         if not self.context_manager:
             return False
         return self.context_manager.update_context(context_id, **updates)
-    
+
     def delete_context(self, context_id: str) -> bool:
         """Delete a context item"""
         if not self.context_manager:
             return False
         return self.context_manager.delete_context(context_id)
-    
-    def clear_contexts(self, 
-                      type_filter: Optional[ContextType] = None,
-                      agent_filter: Optional[str] = None,
-                      tag_filter: Optional[List[str]] = None) -> int:
+
+    def clear_contexts(
+        self,
+        type_filter: Optional[ContextType] = None,
+        agent_filter: Optional[str] = None,
+        tag_filter: Optional[List[str]] = None,
+    ) -> int:
         """Clear context items with optional filters"""
         if not self.context_manager:
             return 0
         return self.context_manager.clear_contexts(
-            type_filter=type_filter,
-            agent_filter=agent_filter,
-            tag_filter=tag_filter
+            type_filter=type_filter, agent_filter=agent_filter, tag_filter=tag_filter
         )
-    
+
     def get_context_summary(self) -> Dict[str, Any]:
         """Get a summary of all contexts"""
         if not self.context_manager:
             return {"error": "Context management is not enabled"}
         return self.context_manager.get_context_summary()
-    
-    def export_contexts(self, 
-                      format: str = "json",
-                      include_expired: bool = False,
-                      filters: Optional[Dict[str, Any]] = None) -> str:
+
+    def export_contexts(
+        self,
+        format: str = "json",
+        include_expired: bool = False,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> str:
         """Export contexts in various formats"""
         if not self.context_manager:
             return ""
         return self.context_manager.export_contexts(
-            format=format,
-            include_expired=include_expired,
-            filters=filters
+            format=format, include_expired=include_expired, filters=filters
         )
-    
+
     def import_contexts(self, data: str, format: str = "json") -> int:
         """Import contexts from various formats"""
         if not self.context_manager:
             return 0
         return self.context_manager.import_contexts(data, format)
-    
+
     def _auto_capture_context(self, event: TraceEvent):
         """Automatically capture context from trace events"""
         if not self.context_manager:
             return
-        
+
         # Capture different types of context based on event type
         if event.event_type == EventType.MEMORY_WRITE:
             # Capture memory writes as context
             self.context_manager.add_context(
                 type=ContextType.MEMORY,
-                key=event.data.get('key', 'unknown'),
-                value=event.data.get('value'),
+                key=event.data.get("key", "unknown"),
+                value=event.data.get("value"),
                 priority=ContextPriority.MEDIUM,
                 agent_id=event.agent_id,
                 step_id=event.step_id,
-                tags=['auto-captured', 'memory-write']
+                tags=["auto-captured", "memory-write"],
             )
-        
+
         elif event.event_type == EventType.LLM_CALL_END:
             # Capture LLM responses as knowledge context
             self.context_manager.add_context(
                 type=ContextType.KNOWLEDGE,
                 key=f"llm_response_{event.step_id}",
-                value=event.data.get('response'),
+                value=event.data.get("response"),
                 priority=ContextPriority.HIGH,
                 agent_id=event.agent_id,
                 step_id=event.step_id,
-                tags=['auto-captured', 'llm-response']
+                tags=["auto-captured", "llm-response"],
             )
-        
+
         elif event.event_type == EventType.TOOL_CALL_END:
             # Capture tool outputs as knowledge context
             self.context_manager.add_context(
                 type=ContextType.KNOWLEDGE,
                 key=f"tool_output_{event.data.get('tool_name', 'unknown')}",
-                value=event.data.get('result'),
+                value=event.data.get("result"),
                 priority=ContextPriority.MEDIUM,
                 agent_id=event.agent_id,
                 step_id=event.step_id,
-                tags=['auto-captured', 'tool-output', event.data.get('tool_name', 'unknown')]
+                tags=[
+                    "auto-captured",
+                    "tool-output",
+                    event.data.get("tool_name", "unknown"),
+                ],
             )
-        
+
         elif event.event_type == EventType.TASK_START:
             # Capture task descriptions as task context
             self.context_manager.add_context(
                 type=ContextType.TASK,
                 key=f"task_{event.step_id}",
-                value=event.data.get('task_description'),
+                value=event.data.get("task_description"),
                 priority=ContextPriority.HIGH,
                 agent_id=event.agent_id,
                 step_id=event.step_id,
-                tags=['auto-captured', 'task']
+                tags=["auto-captured", "task"],
             )
-        
+
         elif event.event_type == EventType.ERROR:
             # Capture errors as system state context
             self.context_manager.add_context(
                 type=ContextType.SYSTEM_STATE,
                 key=f"error_{event.step_id}",
                 value={
-                    'error': event.data.get('error'),
-                    'error_type': event.data.get('error_type'),
-                    'context': event.data
+                    "error": event.data.get("error"),
+                    "error_type": event.data.get("error_type"),
+                    "context": event.data,
                 },
                 priority=ContextPriority.CRITICAL,
                 agent_id=event.agent_id,
                 step_id=event.step_id,
-                tags=['auto-captured', 'error', event.data.get('error_type', 'unknown')]
+                tags=[
+                    "auto-captured",
+                    "error",
+                    event.data.get("error_type", "unknown"),
+                ],
             )
-
-

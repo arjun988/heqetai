@@ -36,10 +36,14 @@ class WebPortalDebugger(AgentDebugger):
         self.event_buffer.append(event)
         if len(self.event_buffer) > self.max_buffer_size:
             self.event_buffer.pop(0)
-        socketio.emit("trace_event", {
-            "event": self._serialize_event(event),
-            "timestamp": event.timestamp.isoformat()
-        }, namespace="/")
+        socketio.emit(
+            "trace_event",
+            {
+                "event": self._serialize_event(event),
+                "timestamp": event.timestamp.isoformat(),
+            },
+            namespace="/",
+        )
 
         # Emit performance update if performance monitoring is enabled
         if self.performance_monitor:
@@ -55,16 +59,20 @@ class WebPortalDebugger(AgentDebugger):
             "data": event.data,
             "parent_event_id": event.parent_event_id,
             "metadata": event.metadata,
-            "duration": event.duration
+            "duration": event.duration,
         }
 
     def _trigger_breakpoint(self, event: TraceEvent, agent_id: str):
         super()._trigger_breakpoint(event, agent_id)
-        socketio.emit("breakpoint_hit", {
-            "event": self._serialize_event(event),
-            "agent_id": agent_id,
-            "agent_state": self._serialize_agent_state(self.agent_states[agent_id])
-        }, namespace="/")
+        socketio.emit(
+            "breakpoint_hit",
+            {
+                "event": self._serialize_event(event),
+                "agent_id": agent_id,
+                "agent_state": self._serialize_agent_state(self.agent_states[agent_id]),
+            },
+            namespace="/",
+        )
 
     def _serialize_agent_state(self, state: AgentState) -> Dict[str, Any]:
         last_llm_call = None
@@ -72,8 +80,12 @@ class WebPortalDebugger(AgentDebugger):
             last_llm_call = {
                 "prompt": state.last_llm_call.get("prompt", ""),
                 "response": state.last_llm_call.get("response", ""),
-                "timestamp": state.last_llm_call.get("timestamp").isoformat() if state.last_llm_call.get("timestamp") else None,
-                "duration": state.last_llm_call.get("duration", 0)
+                "timestamp": (
+                    state.last_llm_call.get("timestamp").isoformat()
+                    if state.last_llm_call.get("timestamp")
+                    else None
+                ),
+                "duration": state.last_llm_call.get("duration", 0),
             }
 
         return {
@@ -88,7 +100,7 @@ class WebPortalDebugger(AgentDebugger):
             "created_at": state.created_at.isoformat(),
             "tasks_completed": state.tasks_completed,
             "errors_encountered": state.errors_encountered,
-            "performance_stats": state.performance_stats
+            "performance_stats": state.performance_stats,
         }
 
     def get_web_summary(self) -> Dict[str, Any]:
@@ -99,7 +111,9 @@ class WebPortalDebugger(AgentDebugger):
             "events_by_type": self._get_events_by_type(),
             "agent_stats": self._get_agent_stats(),
             "performance_summary": self._get_performance_summary(),
-            "recent_events": [self._serialize_event(e) for e in self.trace_events[-10:]]
+            "recent_events": [
+                self._serialize_event(e) for e in self.trace_events[-10:]
+            ],
         }
 
         # Add context summary if context management is enabled
@@ -121,14 +135,18 @@ class WebPortalDebugger(AgentDebugger):
                 "tool_execution_times": [],
                 "llm_response_times": [],
                 "memory_access_times": [],
-                "reasoning_times": []
+                "reasoning_times": [],
             }
             self.performance_monitor.start_times.clear()
         print("🎉 Web portal memory cleanup completed!")
-        socketio.emit("debugger_cleaned", {
-            "message": "Debugger memory has been cleaned",
-            "timestamp": datetime.now().isoformat()
-        }, namespace="/")
+        socketio.emit(
+            "debugger_cleaned",
+            {
+                "message": "Debugger memory has been cleaned",
+                "timestamp": datetime.now().isoformat(),
+            },
+            namespace="/",
+        )
 
     def _get_events_by_type(self) -> Dict[str, int]:
         counts: Dict[str, int] = {}
@@ -146,20 +164,20 @@ class WebPortalDebugger(AgentDebugger):
                 "is_paused": state.is_paused,
                 "created_at": state.created_at.isoformat(),
                 "memory_size": len(state.memory),
-                "tool_outputs_count": len(state.tool_outputs)
+                "tool_outputs_count": len(state.tool_outputs),
             }
         return stats
 
     def _get_performance_summary(self) -> Dict[str, Any]:
         if not self.performance_monitor:
             return {}
-        
+
         # Update system metrics before getting stats
         self.performance_monitor.update_system_metrics()
-        
+
         # Get comprehensive statistics
         comprehensive_stats = self.performance_monitor.get_comprehensive_statistics()
-        
+
         # Fix total_events synchronization - use actual trace events count
         session_info = comprehensive_stats.get("session_info", {})
         session_info["total_events"] = len(self.trace_events)
@@ -175,23 +193,28 @@ class WebPortalDebugger(AgentDebugger):
             "session_info": session_info,
             "alerts": comprehensive_stats.get("alerts", []),
             "performance_trends": comprehensive_stats.get("performance_trends", {}),
-            "chart_data": chart_data
+            "chart_data": chart_data,
         }
-        
+
         return result
-    
+
     def _get_chart_data(self) -> Dict[str, Any]:
         """Get chart data for all metric types"""
         if not self.performance_monitor:
             return {}
-        
+
         chart_data = {}
-        
+
         # Core performance charts
-        for metric in ["tool_execution_times", "llm_response_times", "memory_access_times", "reasoning_times"]:
+        for metric in [
+            "tool_execution_times",
+            "llm_response_times",
+            "memory_access_times",
+            "reasoning_times",
+        ]:
             data = self.performance_monitor.get_chart_data(metric)
             chart_data[metric] = data
-        
+
         # System metrics charts
         for metric in ["cpu_usage", "memory_usage", "disk_io", "network_io"]:
             data = self.performance_monitor.get_chart_data(metric)
@@ -201,44 +224,46 @@ class WebPortalDebugger(AgentDebugger):
         for metric in ["context_size", "agent_memory_size", "total_memory_usage"]:
             data = self.performance_monitor.get_chart_data(metric)
             chart_data[metric] = data
-        
+
         return chart_data
-    
+
     def _emit_performance_update(self):
         """Emit performance update via WebSocket"""
         try:
             # Update system metrics
             self.performance_monitor.update_system_metrics()
-            
+
             # Get current performance data
             performance_data = self.performance_monitor.get_comprehensive_statistics()
-            
+
             # Emit performance update
-            socketio.emit("performance_update", {
-                "metrics": performance_data,
-                "timestamp": datetime.now().isoformat()
-            }, namespace="/")
+            socketio.emit(
+                "performance_update",
+                {"metrics": performance_data, "timestamp": datetime.now().isoformat()},
+                namespace="/",
+            )
 
             # Check for new alerts
             if performance_data.get("alerts"):
                 latest_alerts = performance_data["alerts"][-5:]  # Last 5 alerts
                 for alert in latest_alerts:
                     socketio.emit("performance_alert", alert, namespace="/")
-                    
+
         except Exception as e:
             print(f"Error emitting performance update: {e}")
 
 
 debugger_instance: Optional[AgentDebugger] = None
-debugger_lock = None  # Using SocketIO/event loop; external locking not required for this module
+debugger_lock = (
+    None  # Using SocketIO/event loop; external locking not required for this module
+)
 
 
 def init_web_debugger() -> WebPortalDebugger:
     global debugger_instance
     if debugger_instance is None:
         debugger_instance = WebPortalDebugger(
-            enable_replay=True,
-            enable_performance_monitoring=True
+            enable_replay=True, enable_performance_monitoring=True
         )
     return debugger_instance
 
@@ -281,14 +306,16 @@ def get_events():
     start = (page - 1) * per_page
     end = start + per_page
     page_events = events[start:end]
-    return jsonify({
-        "events": [debugger._serialize_event(e) for e in page_events],
-        "total": len(events),
-        "page": page,
-        "per_page": per_page,
-        "has_next": end < len(events),
-        "has_prev": page > 1
-    })
+    return jsonify(
+        {
+            "events": [debugger._serialize_event(e) for e in page_events],
+            "total": len(events),
+            "page": page,
+            "per_page": per_page,
+            "has_next": end < len(events),
+            "has_prev": page > 1,
+        }
+    )
 
 
 @app.route("/api/breakpoints", methods=["GET", "POST", "DELETE"])
@@ -297,16 +324,18 @@ def manage_breakpoints():
     if request.method == "GET":
         breakpoints: List[Dict[str, Any]] = []
         for bp in debugger.breakpoints:
-            breakpoints.append({
-                "id": bp.id,
-                "breakpoint_type": bp.breakpoint_type.value,
-                "tool_name": bp.tool_name,
-                "agent_id": bp.agent_id,
-                "enabled": bp.enabled,
-                "hit_count": bp.hit_count,
-                "temporary": bp.temporary,
-                "metadata": bp.metadata
-            })
+            breakpoints.append(
+                {
+                    "id": bp.id,
+                    "breakpoint_type": bp.breakpoint_type.value,
+                    "tool_name": bp.tool_name,
+                    "agent_id": bp.agent_id,
+                    "enabled": bp.enabled,
+                    "hit_count": bp.hit_count,
+                    "temporary": bp.temporary,
+                    "metadata": bp.metadata,
+                }
+            )
         return jsonify(breakpoints)
     elif request.method == "POST":
         data = request.json
@@ -317,26 +346,32 @@ def manage_breakpoints():
             agent_id=data.get("agent_id"),
             enabled=data.get("enabled", True),
             temporary=data.get("temporary", False),
-            metadata=data.get("metadata", {})
+            metadata=data.get("metadata", {}),
         )
         debugger.add_breakpoint(breakpoint)
-        socketio.emit("breakpoint_added", {
-            "breakpoint": {
-                "id": breakpoint.id,
-                "breakpoint_type": breakpoint.breakpoint_type.value,
-                "tool_name": breakpoint.tool_name,
-                "agent_id": breakpoint.agent_id,
-                "enabled": breakpoint.enabled,
-                "hit_count": breakpoint.hit_count,
-                "temporary": breakpoint.temporary,
-                "metadata": breakpoint.metadata
-            }
-        }, namespace="/")
+        socketio.emit(
+            "breakpoint_added",
+            {
+                "breakpoint": {
+                    "id": breakpoint.id,
+                    "breakpoint_type": breakpoint.breakpoint_type.value,
+                    "tool_name": breakpoint.tool_name,
+                    "agent_id": breakpoint.agent_id,
+                    "enabled": breakpoint.enabled,
+                    "hit_count": breakpoint.hit_count,
+                    "temporary": breakpoint.temporary,
+                    "metadata": breakpoint.metadata,
+                }
+            },
+            namespace="/",
+        )
         return jsonify({"success": True, "breakpoint_id": breakpoint.id})
     elif request.method == "DELETE":
         breakpoint_id = request.json.get("breakpoint_id")
         debugger.remove_breakpoint(breakpoint_id)
-        socketio.emit("breakpoint_removed", {"breakpoint_id": breakpoint_id}, namespace="/")
+        socketio.emit(
+            "breakpoint_removed", {"breakpoint_id": breakpoint_id}, namespace="/"
+        )
         return jsonify({"success": True})
 
 
@@ -360,11 +395,14 @@ def control_agent(agent_id):
             state.is_paused = False
         else:
             return jsonify({"error": f"Unknown action: {action}"}), 400
-        socketio.emit("agent_state_changed", {
-            "agent_id": agent_id,
-            "state": debugger._serialize_agent_state(state)
-        }, namespace="/")
-        return jsonify({"success": True, "action": action, "is_paused": state.is_paused})
+        socketio.emit(
+            "agent_state_changed",
+            {"agent_id": agent_id, "state": debugger._serialize_agent_state(state)},
+            namespace="/",
+        )
+        return jsonify(
+            {"success": True, "action": action, "is_paused": state.is_paused}
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -373,11 +411,13 @@ def control_agent(agent_id):
 def manage_mocks():
     debugger = init_web_debugger()
     if request.method == "GET":
-        return jsonify({
-            "tool_mocks": debugger.mock_registry._tool_mocks,
-            "llm_mocks": debugger.mock_registry._llm_mocks,
-            "replay_mode": debugger.mock_registry.is_replay_mode()
-        })
+        return jsonify(
+            {
+                "tool_mocks": debugger.mock_registry._tool_mocks,
+                "llm_mocks": debugger.mock_registry._llm_mocks,
+                "replay_mode": debugger.mock_registry.is_replay_mode(),
+            }
+        )
     elif request.method == "POST":
         data = request.json
         mock_type = data.get("type")
@@ -387,7 +427,11 @@ def manage_mocks():
             debugger.mock_registry.mock_tool(name, output)
         elif mock_type == "llm":
             debugger.mock_registry.mock_llm(name, output)
-        socketio.emit("mock_added", {"type": mock_type, "name": name, "output": output}, namespace="/")
+        socketio.emit(
+            "mock_added",
+            {"type": mock_type, "name": name, "output": output},
+            namespace="/",
+        )
         return jsonify({"success": True})
     elif request.method == "DELETE":
         debugger.mock_registry.clear_mocks()
@@ -400,7 +444,13 @@ def cleanup_debugger():
     try:
         debugger = init_web_debugger()
         debugger.cleanup_memory()
-        return jsonify({"success": True, "message": "Debugger memory cleaned successfully", "timestamp": datetime.now().isoformat()})
+        return jsonify(
+            {
+                "success": True,
+                "message": "Debugger memory cleaned successfully",
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -447,10 +497,9 @@ def get_performance_alerts():
         return jsonify({"error": "Performance monitoring not enabled"}), 400
 
     alerts = debugger.performance_monitor.alerts
-    return jsonify({
-        "alerts": alerts[-50:],  # Last 50 alerts
-        "total_alerts": len(alerts)
-    })
+    return jsonify(
+        {"alerts": alerts[-50:], "total_alerts": len(alerts)}  # Last 50 alerts
+    )
 
 
 @app.route("/api/performance/agents/<agent_id>")
@@ -466,14 +515,17 @@ def get_agent_performance(agent_id):
     agent_data = debugger.performance_monitor.agent_metrics[agent_id]
     efficiency_score = debugger.performance_monitor.calculate_efficiency_score(agent_id)
 
-    return jsonify({
-        "agent_id": agent_id,
-        "metrics": debugger.performance_monitor._get_metric_stats(agent_data),
-        "efficiency_score": efficiency_score,
-        "total_tasks": len(agent_data["task_completion_times"]),
-        "total_errors": sum(agent_data["error_count"]),
-        "avg_memory_usage": sum(agent_data["memory_usage"]) / max(1, len(agent_data["memory_usage"]))
-    })
+    return jsonify(
+        {
+            "agent_id": agent_id,
+            "metrics": debugger.performance_monitor._get_metric_stats(agent_data),
+            "efficiency_score": efficiency_score,
+            "total_tasks": len(agent_data["task_completion_times"]),
+            "total_errors": sum(agent_data["error_count"]),
+            "avg_memory_usage": sum(agent_data["memory_usage"])
+            / max(1, len(agent_data["memory_usage"])),
+        }
+    )
 
 
 @app.route("/api/performance/system")
@@ -486,14 +538,20 @@ def get_system_performance():
     # Update system metrics
     debugger.performance_monitor.update_system_metrics()
 
-    system_stats = debugger.performance_monitor._get_metric_stats(debugger.performance_monitor.system_metrics)
+    system_stats = debugger.performance_monitor._get_metric_stats(
+        debugger.performance_monitor.system_metrics
+    )
 
-    return jsonify({
-        "system_metrics": system_stats,
-        "current_cpu": psutil.cpu_percent() if "psutil" in globals() else 0,
-        "current_memory": psutil.virtual_memory().percent if "psutil" in globals() else 0,
-        "timestamp": datetime.now().isoformat()
-    })
+    return jsonify(
+        {
+            "system_metrics": system_stats,
+            "current_cpu": psutil.cpu_percent() if "psutil" in globals() else 0,
+            "current_memory": (
+                psutil.virtual_memory().percent if "psutil" in globals() else 0
+            ),
+            "timestamp": datetime.now().isoformat(),
+        }
+    )
 
 
 @app.route("/api/replay", methods=["POST"])
@@ -517,6 +575,7 @@ def replay_trace():
 
 # Context Management API Endpoints
 
+
 @app.route("/api/contexts", methods=["GET", "POST", "PUT", "DELETE"])
 def manage_contexts():
     debugger = init_web_debugger()
@@ -533,14 +592,16 @@ def manage_contexts():
 
         # Convert string filters to enums
         type_enum = ContextType(type_filter) if type_filter else None
-        priority_enums = [ContextPriority(p) for p in priority_filter] if priority_filter else None
+        priority_enums = (
+            [ContextPriority(p) for p in priority_filter] if priority_filter else None
+        )
 
         contexts = debugger.search_contexts(
             query=query,
             type_filter=type_enum,
             agent_filter=agent_filter,
             tag_filter=tag_filter,
-            priority_filter=priority_enums
+            priority_filter=priority_enums,
         )
 
         return jsonify([context.to_dict() for context in contexts])
@@ -558,19 +619,19 @@ def manage_contexts():
                 tags=data.get("tags", []),
                 metadata=data.get("metadata", {}),
                 agent_id=data.get("agent_id"),
-                step_id=data.get("step_id")
+                step_id=data.get("step_id"),
             )
 
-            socketio.emit("context_added", {
-                "context_id": context_id,
-                "type": data["type"],
-                "key": data["key"]
-            }, namespace="/")
+            socketio.emit(
+                "context_added",
+                {"context_id": context_id, "type": data["type"], "key": data["key"]},
+                namespace="/",
+            )
 
             return jsonify({"success": True, "context_id": context_id})
         except Exception as e:
             return jsonify({"error": str(e)}), 400
-    
+
     elif request.method == "PUT":
         # Update context
         data = request.json
@@ -582,10 +643,11 @@ def manage_contexts():
         success = debugger.update_context(context_id, **updates)
 
         if success:
-            socketio.emit("context_updated", {
-                "context_id": context_id,
-                "updates": updates
-            }, namespace="/")
+            socketio.emit(
+                "context_updated",
+                {"context_id": context_id, "updates": updates},
+                namespace="/",
+            )
             return jsonify({"success": True})
         else:
             return jsonify({"error": "Context not found"}), 404
@@ -599,9 +661,7 @@ def manage_contexts():
 
         success = debugger.delete_context(context_id)
         if success:
-            socketio.emit("context_deleted", {
-                "context_id": context_id
-            }, namespace="/")
+            socketio.emit("context_deleted", {"context_id": context_id}, namespace="/")
             return jsonify({"success": True})
         else:
             return jsonify({"error": "Context not found"}), 404
@@ -638,15 +698,17 @@ def export_contexts():
         exported_data = debugger.export_contexts(
             format=format_type,
             include_expired=include_expired,
-            filters=filters if filters else None
+            filters=filters if filters else None,
         )
 
-        return jsonify({
-            "success": True,
-            "data": exported_data,
-            "format": format_type,
-            "timestamp": datetime.now().isoformat()
-        })
+        return jsonify(
+            {
+                "success": True,
+                "data": exported_data,
+                "format": format_type,
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -673,16 +735,15 @@ def import_contexts():
         # Import contexts
         imported_count = debugger.import_contexts(file_content, format_type)
 
-        socketio.emit("contexts_imported", {
-            "count": imported_count,
-            "format": format_type
-        }, namespace="/")
+        socketio.emit(
+            "contexts_imported",
+            {"count": imported_count, "format": format_type},
+            namespace="/",
+        )
 
-        return jsonify({
-            "success": True,
-            "imported_count": imported_count,
-            "format": format_type
-        })
+        return jsonify(
+            {"success": True, "imported_count": imported_count, "format": format_type}
+        )
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -703,24 +764,23 @@ def clear_contexts():
 
     try:
         cleared_count = debugger.clear_contexts(
-            type_filter=type_enum,
-            agent_filter=agent_filter,
-            tag_filter=tag_filter
+            type_filter=type_enum, agent_filter=agent_filter, tag_filter=tag_filter
         )
 
-        socketio.emit("contexts_cleared", {
-            "count": cleared_count,
-            "filters": {
-                "type": type_filter,
-                "agent_id": agent_filter,
-                "tags": tag_filter
-            }
-        }, namespace="/")
+        socketio.emit(
+            "contexts_cleared",
+            {
+                "count": cleared_count,
+                "filters": {
+                    "type": type_filter,
+                    "agent_id": agent_filter,
+                    "tags": tag_filter,
+                },
+            },
+            namespace="/",
+        )
 
-        return jsonify({
-            "success": True,
-            "cleared_count": cleared_count
-        })
+        return jsonify({"success": True, "cleared_count": cleared_count})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -758,14 +818,19 @@ def handle_agent_command(data):
         state.is_paused = False
     elif command == "step":
         state.is_paused = False
-    socketio.emit("agent_state_changed", {"agent_id": agent_id, "state": debugger._serialize_agent_state(state)})
+    socketio.emit(
+        "agent_state_changed",
+        {"agent_id": agent_id, "state": debugger._serialize_agent_state(state)},
+    )
 
 
 def create_web_debugger(framework: str = "generic", **kwargs) -> WebPortalDebugger:
     return WebPortalDebugger(**kwargs)
 
 
-def attach_agent_to_web(agent, agent_id: Optional[str] = None, framework: str = "generic"):
+def attach_agent_to_web(
+    agent, agent_id: Optional[str] = None, framework: str = "generic"
+):
     debugger = init_web_debugger()
     return debugger.attach(agent, agent_id)
 
@@ -779,5 +844,3 @@ if __name__ == "__main__":
     print("🔧 API: http://localhost:5000/api/")
     print("📡 WebSocket: ws://localhost:5000/socket.io/")
     socketio.run(app, debug=True, host="0.0.0.0", port=5000)
-
-

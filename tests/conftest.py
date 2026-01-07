@@ -1,13 +1,14 @@
 """
 Shared test fixtures and configuration for agentdebugger tests.
 """
+
 import pytest
 import sys
 import os
 from unittest.mock import Mock, MagicMock
 
 # Add the project root to the Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent_debugger import (
     AgentDebugger,
@@ -65,8 +66,8 @@ def sample_trace_event():
         data={
             "tool_name": "web_search",
             "input": "test query",
-            "output": "test result"
-        }
+            "output": "test result",
+        },
     )
 
 
@@ -74,8 +75,7 @@ def sample_trace_event():
 def sample_breakpoint():
     """Create a sample breakpoint for testing."""
     return Breakpoint(
-        breakpoint_type=BreakpointType.BEFORE_TOOL,
-        tool_name="web_search"
+        breakpoint_type=BreakpointType.BEFORE_TOOL, tool_name="web_search"
     )
 
 
@@ -86,7 +86,7 @@ def agent_state():
         agent_id="test_agent",
         memory={"key": "value"},
         tools=["web_search", "file_read"],
-        current_task="Test task"
+        current_task="Test task",
     )
 
 

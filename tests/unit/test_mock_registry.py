@@ -1,6 +1,7 @@
 """
 Unit tests for the MockRegistry functionality.
 """
+
 import pytest
 from unittest.mock import Mock, patch
 
@@ -111,7 +112,9 @@ class TestMockRegistry:
         assert callable(registry.llm_mocks["summarize"])
 
         # Test calling the mock function
-        result = registry.llm_mocks["summarize"]("This is a long text that should be summarized")
+        result = registry.llm_mocks["summarize"](
+            "This is a long text that should be summarized"
+        )
         assert result == "Summary of: This is a long text that should be summarized..."
 
     def test_unmock_llm(self):
@@ -285,9 +288,9 @@ class TestMockRegistry:
         complex_mock = {
             "results": [
                 {"title": "Result 1", "url": "http://example.com/1"},
-                {"title": "Result 2", "url": "http://example.com/2"}
+                {"title": "Result 2", "url": "http://example.com/2"},
             ],
-            "total_count": 2
+            "total_count": 2,
         }
 
         registry.mock_tool("web_search", complex_mock)

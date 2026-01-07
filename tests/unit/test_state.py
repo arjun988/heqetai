@@ -1,6 +1,7 @@
 """
 Unit tests for the agent state management.
 """
+
 import pytest
 from datetime import datetime
 
@@ -16,7 +17,7 @@ class TestAgentState:
             agent_id="test_agent",
             memory={"key": "value"},
             tools=["web_search", "file_read"],
-            current_task="Test task"
+            current_task="Test task",
         )
 
         assert state.agent_id == "test_agent"
@@ -59,8 +60,7 @@ class TestAgentState:
     def test_agent_state_remove_tool(self):
         """Test removing tools from agent state."""
         state = AgentState(
-            agent_id="test_agent",
-            tools=["web_search", "file_read", "calculator"]
+            agent_id="test_agent", tools=["web_search", "file_read", "calculator"]
         )
 
         state.remove_tool("file_read")
@@ -81,8 +81,7 @@ class TestAgentState:
     def test_agent_state_clear_memory(self):
         """Test clearing agent memory."""
         state = AgentState(
-            agent_id="test_agent",
-            memory={"key1": "value1", "key2": "value2"}
+            agent_id="test_agent", memory={"key1": "value1", "key2": "value2"}
         )
 
         state.clear_memory()
@@ -90,10 +89,7 @@ class TestAgentState:
 
     def test_agent_state_clear_tools(self):
         """Test clearing agent tools."""
-        state = AgentState(
-            agent_id="test_agent",
-            tools=["web_search", "file_read"]
-        )
+        state = AgentState(agent_id="test_agent", tools=["web_search", "file_read"])
 
         state.clear_tools()
         assert state.tools == []
@@ -104,7 +100,7 @@ class TestAgentState:
             agent_id="test_agent",
             memory={"key": "value"},
             tools=["web_search"],
-            current_task="Test task"
+            current_task="Test task",
         )
 
         state_dict = state.to_dict()
@@ -122,7 +118,7 @@ class TestAgentState:
             "memory": {"key": "value"},
             "tools": ["web_search"],
             "current_task": "Test task",
-            "timestamp": "2023-01-01T12:00:00Z"
+            "timestamp": "2023-01-01T12:00:00Z",
         }
 
         state = AgentState.from_dict(state_dict)
@@ -138,7 +134,7 @@ class TestAgentState:
             agent_id="test_agent",
             memory={"key": "value"},
             tools=["web_search"],
-            current_task="Test task"
+            current_task="Test task",
         )
 
         copy_state = original.copy()
@@ -156,21 +152,15 @@ class TestAgentState:
     def test_agent_state_equality(self):
         """Test agent state equality comparison."""
         state1 = AgentState(
-            agent_id="test_agent",
-            memory={"key": "value"},
-            tools=["web_search"]
+            agent_id="test_agent", memory={"key": "value"}, tools=["web_search"]
         )
 
         state2 = AgentState(
-            agent_id="test_agent",
-            memory={"key": "value"},
-            tools=["web_search"]
+            agent_id="test_agent", memory={"key": "value"}, tools=["web_search"]
         )
 
         state3 = AgentState(
-            agent_id="different_agent",
-            memory={"key": "value"},
-            tools=["web_search"]
+            agent_id="different_agent", memory={"key": "value"}, tools=["web_search"]
         )
 
         assert state1 == state2
@@ -182,7 +172,7 @@ class TestAgentState:
             agent_id="test_agent",
             memory={"key": "value"},
             tools=["web_search", "file_read"],
-            current_task="Test task"
+            current_task="Test task",
         )
 
         str_repr = str(state)
@@ -192,10 +182,7 @@ class TestAgentState:
 
     def test_agent_state_has_tool(self):
         """Test checking if agent has a specific tool."""
-        state = AgentState(
-            agent_id="test_agent",
-            tools=["web_search", "file_read"]
-        )
+        state = AgentState(agent_id="test_agent", tools=["web_search", "file_read"])
 
         assert state.has_tool("web_search") is True
         assert state.has_tool("calculator") is False
@@ -203,8 +190,7 @@ class TestAgentState:
     def test_agent_state_get_memory_value(self):
         """Test getting a value from memory."""
         state = AgentState(
-            agent_id="test_agent",
-            memory={"key1": "value1", "key2": "value2"}
+            agent_id="test_agent", memory={"key1": "value1", "key2": "value2"}
         )
 
         assert state.get_memory_value("key1") == "value1"
@@ -215,7 +201,7 @@ class TestAgentState:
         """Test getting memory size."""
         state = AgentState(
             agent_id="test_agent",
-            memory={"key1": "value1", "key2": "value2", "key3": "value3"}
+            memory={"key1": "value1", "key2": "value2", "key3": "value3"},
         )
 
         assert state.memory_size() == 3
@@ -226,8 +212,7 @@ class TestAgentState:
     def test_agent_state_tool_count(self):
         """Test getting tool count."""
         state = AgentState(
-            agent_id="test_agent",
-            tools=["web_search", "file_read", "calculator"]
+            agent_id="test_agent", tools=["web_search", "file_read", "calculator"]
         )
 
         assert state.tool_count() == 3
@@ -240,16 +225,10 @@ class TestAgentState:
         empty_state = AgentState(agent_id="test_agent")
         assert empty_state.is_empty() is True
 
-        non_empty_state = AgentState(
-            agent_id="test_agent",
-            memory={"key": "value"}
-        )
+        non_empty_state = AgentState(agent_id="test_agent", memory={"key": "value"})
         assert non_empty_state.is_empty() is False
 
-        non_empty_state2 = AgentState(
-            agent_id="test_agent",
-            tools=["web_search"]
-        )
+        non_empty_state2 = AgentState(agent_id="test_agent", tools=["web_search"])
         assert non_empty_state2.is_empty() is False
 
     def test_agent_state_merge(self):
@@ -257,13 +236,13 @@ class TestAgentState:
         state1 = AgentState(
             agent_id="test_agent",
             memory={"key1": "value1", "shared": "old_value"},
-            tools=["web_search"]
+            tools=["web_search"],
         )
 
         state2 = AgentState(
             agent_id="test_agent",
             memory={"key2": "value2", "shared": "new_value"},
-            tools=["file_read"]
+            tools=["file_read"],
         )
 
         merged = state1.merge(state2)
@@ -272,7 +251,7 @@ class TestAgentState:
         assert merged.memory == {
             "key1": "value1",
             "key2": "value2",
-            "shared": "new_value"  # state2 wins for conflicts
+            "shared": "new_value",  # state2 wins for conflicts
         }
         assert set(merged.tools) == {"web_search", "file_read"}
 
@@ -281,13 +260,13 @@ class TestAgentState:
         state1 = AgentState(
             agent_id="test_agent",
             memory={"key1": "value1", "shared": "same"},
-            tools=["web_search", "file_read"]
+            tools=["web_search", "file_read"],
         )
 
         state2 = AgentState(
             agent_id="test_agent",
             memory={"key2": "value2", "shared": "same"},
-            tools=["web_search", "calculator"]
+            tools=["web_search", "calculator"],
         )
 
         diff = state1.diff(state2)
