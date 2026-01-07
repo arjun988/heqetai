@@ -5,7 +5,7 @@ Performance monitoring utilities for AgentDebugger.
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Deque
+from typing import Any, Deque, Dict, List, Optional
 
 import psutil
 
