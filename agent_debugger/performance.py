@@ -5,7 +5,7 @@ Performance monitoring utilities for AgentDebugger.
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Deque
 
 import psutil
 
@@ -17,7 +17,7 @@ class PerformanceMonitor:
         self.max_history = max_history
 
         # Core performance metrics
-        self.metrics: Dict[str, deque] = {
+        self.metrics: Dict[str, Deque[float]] = {
             "tool_execution_times": deque(maxlen=max_history),
             "llm_response_times": deque(maxlen=max_history),
             "memory_access_times": deque(maxlen=max_history),
@@ -29,7 +29,7 @@ class PerformanceMonitor:
         }
 
         # Agent-specific metrics
-        self.agent_metrics: Dict[str, Dict[str, deque]] = defaultdict(
+        self.agent_metrics: Dict[str, Dict[str, Deque[float]]] = defaultdict(
             lambda: {
                 "task_completion_times": deque(maxlen=max_history),
                 "error_count": deque(maxlen=max_history),
@@ -41,7 +41,7 @@ class PerformanceMonitor:
         )
 
         # System metrics
-        self.system_metrics: Dict[str, deque] = {
+        self.system_metrics: Dict[str, Deque[float]] = {
             "cpu_usage": deque(maxlen=max_history),
             "memory_usage": deque(maxlen=max_history),
             "disk_io": deque(maxlen=max_history),
@@ -50,7 +50,7 @@ class PerformanceMonitor:
         }
 
         # Memory tracking
-        self.memory_metrics: Dict[str, deque] = {
+        self.memory_metrics: Dict[str, Deque[float]] = {
             "context_size": deque(maxlen=max_history),
             "agent_memory_size": deque(maxlen=max_history),
             "total_memory_usage": deque(maxlen=max_history),
@@ -60,7 +60,7 @@ class PerformanceMonitor:
         # Note: Sample data generation removed - using real performance data only
 
         # Timing tracking
-        self.start_times: Dict[str, datetime] = {}
+        self.start_times: Dict[str, Dict[str, Any]] = {}
         self.session_start = datetime.now()
 
         # Performance alerts
@@ -212,7 +212,7 @@ class PerformanceMonitor:
         return stats
 
     def _get_metric_stats(
-        self, metrics_dict: Dict[str, deque]
+        self, metrics_dict: Dict[str, Deque[float]]
     ) -> Dict[str, Dict[str, float]]:
         """Get statistics for a metrics dictionary"""
         stats = {}
