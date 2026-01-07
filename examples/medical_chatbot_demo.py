@@ -15,20 +15,20 @@ Features:
 - Medical advice context tracking
 """
 
+import json
 import os
-import time
-import threading
 import random
+import threading
+import time
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
-import json
 
 # LangChain imports
 try:
-    from langchain_google_genai import ChatGoogleGenerativeAI
-    from langchain.prompts import ChatPromptTemplate
-    from langchain.schema import HumanMessage, AIMessage
     from langchain.callbacks.base import BaseCallbackHandler
+    from langchain.prompts import ChatPromptTemplate
+    from langchain.schema import AIMessage, HumanMessage
+    from langchain_google_genai import ChatGoogleGenerativeAI
 except ImportError:
     print(
         "❌ LangChain not installed. Install with: pip install langchain langchain-google-genai"
@@ -37,7 +37,7 @@ except ImportError:
 
 # AgentDebugger imports
 from agent_debugger import AgentDebugger
-from agent_debugger.context import ContextType, ContextPriority
+from agent_debugger.context import ContextPriority, ContextType
 from agent_debugger.web import WebPortalDebugger, attach_agent_to_web
 
 
@@ -493,7 +493,7 @@ if __name__ == "__main__":
         chatbots = run_medical_chatbot_demo()
 
         # Start the Flask server with SocketIO
-        from agent_debugger.web import socketio, app
+        from agent_debugger.web import app, socketio
 
         print("🚀 Starting Flask server with medical chatbot demo...")
         socketio.run(app, debug=False, host="0.0.0.0", port=5000)

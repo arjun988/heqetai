@@ -2,12 +2,12 @@
 AgentDebugger Framework Integrations
 """
 
+from .autogpt import AutoGPTDebugger, AutoGPTIntegration
 from .base import BaseIntegration
-from .langchain import LangChainIntegration, LangChainDebugger
-from .crewai import CrewAIIntegration, CrewAIDebugger
-from .autogpt import AutoGPTIntegration, AutoGPTDebugger
-from .llamaindex import LlamaIndexIntegration, LlamaIndexDebugger
-from .huggingface import HuggingFaceIntegration, HuggingFaceDebugger
+from .crewai import CrewAIDebugger, CrewAIIntegration
+from .huggingface import HuggingFaceDebugger, HuggingFaceIntegration
+from .langchain import LangChainDebugger, LangChainIntegration
+from .llamaindex import LlamaIndexDebugger, LlamaIndexIntegration
 from .orchestrator import MultiAgentOrchestrator
 from .utils import auto_detect_framework, smart_debug
 

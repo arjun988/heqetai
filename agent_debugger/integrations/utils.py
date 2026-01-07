@@ -6,11 +6,11 @@ import inspect
 from typing import Any, Dict, Optional
 
 from ..debugger import AgentDebugger
-from .langchain import LangChainDebugger
-from .crewai import CrewAIDebugger
 from .autogpt import AutoGPTDebugger
-from .llamaindex import LlamaIndexDebugger
+from .crewai import CrewAIDebugger
 from .huggingface import HuggingFaceDebugger
+from .langchain import LangChainDebugger
+from .llamaindex import LlamaIndexDebugger
 
 
 def auto_detect_framework(agent: Any) -> Optional[str]:

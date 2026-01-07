@@ -2,12 +2,12 @@
 AgentDebugger public API.
 """
 
-from .events import EventType, BreakpointType, TraceEvent, Breakpoint
-from .state import AgentState
-from .mocks import MockRegistry
-from .performance import PerformanceMonitor
 from .console import DebugConsole
 from .debugger import AgentDebugger
+from .events import Breakpoint, BreakpointType, EventType, TraceEvent
+from .mocks import MockRegistry
+from .performance import PerformanceMonitor
+from .state import AgentState
 
 __all__ = [
     "AgentDebugger",

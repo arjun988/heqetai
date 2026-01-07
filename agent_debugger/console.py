@@ -4,8 +4,8 @@ Interactive console for AgentDebugger.
 
 from typing import Any
 
-from .context import ContextType, ContextPriority
-from .events import TraceEvent, EventType, Breakpoint, BreakpointType
+from .context import ContextPriority, ContextType
+from .events import Breakpoint, BreakpointType, EventType, TraceEvent
 from .state import AgentState
 
 

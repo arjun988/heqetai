@@ -11,11 +11,10 @@ import psutil
 from flask import Flask, jsonify, render_template, request
 from flask_socketio import SocketIO, emit, join_room, leave_room
 
+from ..context import ContextPriority, ContextType
 from ..debugger import AgentDebugger
-from ..context import ContextType, ContextPriority
 from ..events import Breakpoint, BreakpointType, EventType, TraceEvent
 from ..state import AgentState
-
 
 app = Flask(__name__, template_folder="../../templates", static_folder="../../static")
 app.config["SECRET_KEY"] = "agentdebugger_secret_key_2024"

@@ -1,6 +1,6 @@
 import os
-import sys
 import pathlib
+import sys
 
 # Ensure project root is importable when running directly
 ROOT = pathlib.Path(__file__).resolve().parent
@@ -9,15 +9,14 @@ if str(ROOT) not in sys.path:
 
 HAS_LANGCHAIN = True
 try:
-    from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.output_parsers import StrOutputParser
+    from langchain_core.prompts import ChatPromptTemplate
     from langchain_google_genai import ChatGoogleGenerativeAI
 except Exception:
     HAS_LANGCHAIN = False
 
 from agent_debugger import AgentDebugger, Breakpoint, BreakpointType, EventType
 from agent_debugger.integrations import LangChainDebugger, MultiAgentOrchestrator
-
 
 MEDICAL_CONTEXT = (
     "Hypertension (high blood pressure) increases risk of stroke and heart disease. "

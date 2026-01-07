@@ -4,12 +4,12 @@ Web UI for AgentDebugger.
 
 from .portal import (
     WebPortalDebugger,
-    init_web_debugger,
-    create_web_debugger,
-    attach_agent_to_web,
     app,
-    socketio,
+    attach_agent_to_web,
+    create_web_debugger,
     debugger_instance,
+    init_web_debugger,
+    socketio,
 )
 
 __all__ = [

@@ -2,24 +2,25 @@
 Shared test fixtures and configuration for agentdebugger tests.
 """
 
-import pytest
-import sys
 import os
-from unittest.mock import Mock, MagicMock
+import sys
+from unittest.mock import MagicMock, Mock
+
+import pytest
 
 # Add the project root to the Python path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agent_debugger import (
     AgentDebugger,
-    EventType,
-    BreakpointType,
-    TraceEvent,
-    Breakpoint,
     AgentState,
+    Breakpoint,
+    BreakpointType,
+    DebugConsole,
+    EventType,
     MockRegistry,
     PerformanceMonitor,
-    DebugConsole,
+    TraceEvent,
 )
 
 

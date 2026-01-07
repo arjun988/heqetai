@@ -4,14 +4,14 @@ Compatibility shim: expose the public API from the new agent_debugger package.
 
 from agent_debugger import (
     AgentDebugger,
-    EventType,
-    BreakpointType,
-    TraceEvent,
-    Breakpoint,
     AgentState,
+    Breakpoint,
+    BreakpointType,
+    DebugConsole,
+    EventType,
     MockRegistry,
     PerformanceMonitor,
-    DebugConsole,
+    TraceEvent,
 )
 
 __all__ = [

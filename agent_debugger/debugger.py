@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Any, Callable, Dict, List, Optional
 
 from .console import DebugConsole
-from .context import ContextManager, ContextType, ContextPriority
+from .context import ContextManager, ContextPriority, ContextType
 from .events import Breakpoint, EventType, TraceEvent
 from .mocks import MockRegistry
 from .performance import PerformanceMonitor

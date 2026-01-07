@@ -2,15 +2,16 @@
 Unit tests for the event system and trace events.
 """
 
-import pytest
 from datetime import datetime, timezone
 from unittest.mock import Mock
 
+import pytest
+
 from agent_debugger import (
-    EventType,
-    TraceEvent,
     Breakpoint,
     BreakpointType,
+    EventType,
+    TraceEvent,
 )
 
 

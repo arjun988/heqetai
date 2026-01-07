@@ -5,10 +5,10 @@ Provides advanced context engineering and management capabilities.
 
 import json
 import uuid
+from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta
-from typing import Any, Dict, List, Optional, Set, Tuple
-from dataclasses import dataclass, asdict
 from enum import Enum
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 
 class ContextType(Enum):

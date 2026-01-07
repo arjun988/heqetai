@@ -2,9 +2,10 @@
 Web interface tests for the AgentDebugger web portal.
 """
 
-import pytest
-from unittest.mock import Mock, patch
 import json
+from unittest.mock import Mock, patch
+
+import pytest
 
 try:
     from agent_debugger.web.portal import WebPortal

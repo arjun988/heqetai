@@ -6,16 +6,17 @@ Demonstrates how to use the AgentDebugger framework with the web portal interfac
 This creates a sample agent and shows how to attach the web debugger.
 """
 
-import time
+import random
 import threading
+import time
 from datetime import datetime
 from typing import Any, Dict
-import random
+
+from agent_debugger import EventType, TraceEvent
+from agent_debugger.context import ContextPriority, ContextType
 
 # Import the web portal and existing debugger
-from agent_debugger.web import WebPortalDebugger, attach_agent_to_web, socketio, app
-from agent_debugger import EventType, TraceEvent
-from agent_debugger.context import ContextType, ContextPriority
+from agent_debugger.web import WebPortalDebugger, app, attach_agent_to_web, socketio
 
 
 class DemoAgent:
@@ -330,8 +331,8 @@ def setup_demo_contexts(debugger: WebPortalDebugger):
 
 def add_dynamic_contexts(debugger: WebPortalDebugger):
     """Add dynamic contexts during demo execution"""
-    import time
     import random
+    import time
 
     context_templates = [
         {

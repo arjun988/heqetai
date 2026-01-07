@@ -1,5 +1,5 @@
-import sys
 import pathlib
+import sys
 
 # Ensure project root is importable when running directly
 ROOT = pathlib.Path(__file__).resolve().parent

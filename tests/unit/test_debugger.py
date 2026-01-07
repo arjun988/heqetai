@@ -2,17 +2,18 @@
 Unit tests for the core AgentDebugger functionality.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 
 from agent_debugger import (
     AgentDebugger,
-    EventType,
-    BreakpointType,
-    TraceEvent,
-    Breakpoint,
     AgentState,
+    Breakpoint,
+    BreakpointType,
+    EventType,
+    TraceEvent,
 )
 
 

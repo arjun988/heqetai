@@ -2,11 +2,12 @@
 Performance monitoring utilities for AgentDebugger.
 """
 
-import psutil
 import time
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
 from collections import defaultdict, deque
+from datetime import datetime, timedelta
+from typing import Any, Dict, List, Optional
+
+import psutil
 
 
 class PerformanceMonitor:

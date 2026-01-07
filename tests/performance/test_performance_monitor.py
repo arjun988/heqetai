@@ -2,11 +2,12 @@
 Performance tests for the AgentDebugger performance monitoring.
 """
 
-import pytest
 import time
 from unittest.mock import Mock, patch
 
-from agent_debugger import PerformanceMonitor, TraceEvent, EventType
+import pytest
+
+from agent_debugger import EventType, PerformanceMonitor, TraceEvent
 
 
 class TestPerformanceMonitor:

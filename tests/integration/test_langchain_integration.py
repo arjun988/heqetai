@@ -2,11 +2,12 @@
 Integration tests for LangChain debugger integration.
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
-from agent_debugger.integrations.langchain import LangChainIntegration
+import pytest
+
 from agent_debugger import AgentDebugger, EventType, TraceEvent
+from agent_debugger.integrations.langchain import LangChainIntegration
 
 
 class TestLangChainIntegration:

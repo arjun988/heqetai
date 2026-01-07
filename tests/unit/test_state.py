@@ -2,8 +2,9 @@
 Unit tests for the agent state management.
 """
 
-import pytest
 from datetime import datetime
+
+import pytest
 
 from agent_debugger import AgentState
 

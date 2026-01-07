@@ -2,8 +2,9 @@
 Unit tests for the MockRegistry functionality.
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from agent_debugger import MockRegistry
 

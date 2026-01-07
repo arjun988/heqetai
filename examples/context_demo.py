@@ -8,7 +8,7 @@ import time
 from datetime import datetime, timedelta
 
 from agent_debugger import AgentDebugger
-from agent_debugger.context import ContextType, ContextPriority
+from agent_debugger.context import ContextPriority, ContextType
 
 
 class DemoAgent:
